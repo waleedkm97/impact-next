@@ -25,7 +25,7 @@ export type StorageData = string | number | boolean | null | object | unknown[];
 export class LocalStorageAdapter {
   private prefix: string;
 
-  constructor(prefix: string = 'impact_') {
+  constructor(prefix: string = '') {
     this.prefix = prefix;
   }
 
@@ -77,6 +77,14 @@ export class LocalStorageAdapter {
   }
 
   /**
+   * Safe get with default value - legacy compatibility helper
+   */
+  safeGet<T extends StorageData>(key: string, defaultVal: T): T {
+    const value = this.get<T>(key);
+    return value !== null ? value : defaultVal;
+  }
+
+  /**
    * Set a value in localStorage
    */
   set<T extends StorageData>(key: string, value: T): boolean {
@@ -94,6 +102,13 @@ export class LocalStorageAdapter {
       console.error(`Error setting to localStorage (key: ${key}):`, error);
       return false;
     }
+  }
+
+  /**
+   * Safe set with error handling - legacy compatibility helper
+   */
+  safeSet<T extends StorageData>(key: string, value: T): boolean {
+    return this.set(key, value);
   }
 
   /**
@@ -216,5 +231,5 @@ export class LocalStorageAdapter {
   }
 }
 
-// Export a singleton instance with default prefix
-export const localStorageAdapter = new LocalStorageAdapter('impact_');
+// Export a singleton instance with no prefix (storage keys are fully qualified)
+export const localStorageAdapter = new LocalStorageAdapter('');
