@@ -97,7 +97,7 @@ export interface CertificateSettings {
   autoGenerate: boolean;
   requireCompletion: boolean;
   requireAssessmentPass: boolean;
-  validityPeriod?: number; // in days, null for lifetime
+  validityPeriod?: number;
 }
 
 export interface SecuritySettings {
@@ -107,9 +107,9 @@ export interface SecuritySettings {
   passwordRequireLowercase: boolean;
   passwordRequireNumbers: boolean;
   passwordRequireSpecialChars: boolean;
-  sessionTimeout: number; // in minutes
+  sessionTimeout: number;
   maxLoginAttempts: number;
-  lockoutDuration: number; // in minutes
+  lockoutDuration: number;
 }
 
 export interface AnalyticsSettings {
@@ -137,7 +137,7 @@ export interface NotificationSettings {
 export interface SystemSettings {
   maintenanceMode: boolean;
   maintenanceMessage?: string;
-  allowedIps?: string[]; // IPs allowed during maintenance
+  allowedIps?: string[];
   version: string;
   lastUpdated: Date;
 }
@@ -152,8 +152,7 @@ export interface Settings {
   analytics: AnalyticsSettings;
   notifications: NotificationSettings;
   system: SystemSettings;
-  
-  // Metadata
+
   updatedAt: Date;
-  updatedBy?: string; // Admin user ID
+  updatedBy?: string;
 }
