@@ -1,295 +1,67 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
-
 import { courseRepository } from '@/lib/data/repositories/course-repository';
-import { serviceRepository } from '@/lib/data/repositories/service-repository';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { orderRepository } from '@/lib/data/repositories/order-repository';
-import { couponRepository } from '@/lib/data/repositories/coupon-repository';
 import { categoryRepository } from '@/lib/data/repositories/category-repository';
-import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
-
-type StatCard = {
-  title: string;
-  value: number;
-  href: string;
-};
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<StatCard[]>([
-    { title: 'الدورات', value: 0, href: '/admin/courses' },
-    { title: 'الخدمات', value: 0, href: '/admin/services' },
-    { title: 'المتدربون', value: 0, href: '/admin/students' },
-    { title: 'الطلبات', value: 0, href: '/admin/orders' },
-    { title: 'الكوبونات', value: 0, href: '/admin/coupons' },
-    { title: 'التصنيفات', value: 0, href: '/admin/categories' },
-    { title: 'الجداول', value: 0, href: '/admin/schedules' },
-  ]);
-
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ recorded: 0, training: 0, trainees: 0, orders: 0, revenue: 0, categories: 0 });
+  const [recent, setRecent] = useState<any[]>([]);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadDashboard() {
-      try {
-        const [
-          courses,
-          services,
-          trainees,
-          orders,
-          coupons,
-          categories,
-          schedules,
-        ] = await Promise.all([
-          courseRepository.findAll(),
-          serviceRepository.findAll(),
-          traineeRepository.findAll(),
-          orderRepository.findAll(),
-          couponRepository.findAll(),
-          categoryRepository.findAll(),
-          scheduleRepository.findAll(),
-        ]);
-
-        if (!mounted) return;
-
-        setStats([
-          {
-            title: 'الدورات',
-            value: courses.length,
-            href: '/admin/courses',
-          },
-          {
-            title: 'الخدمات',
-            value: services.length,
-            href: '/admin/services',
-          },
-          {
-            title: 'المتدربون',
-            value: trainees.length,
-            href: '/admin/students',
-          },
-          {
-            title: 'الطلبات',
-            value: orders.length,
-            href: '/admin/orders',
-          },
-          {
-            title: 'الكوبونات',
-            value: coupons.length,
-            href: '/admin/coupons',
-          },
-          {
-            title: 'التصنيفات',
-            value: categories.length,
-            href: '/admin/categories',
-          },
-          {
-            title: 'الجداول',
-            value: schedules.length,
-            href: '/admin/schedules',
-          },
-        ]);
-      } catch (error) {
-        console.error('Failed to load admin dashboard:', error);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
+    async function load() {
+      const [recorded, training, trainees, orders, categories] = await Promise.all([
+        courseRepository.findByType('recorded'),
+        courseRepository.findByType('training'),
+        traineeRepository.findAll(),
+        orderRepository.findAll(),
+        categoryRepository.findAll(),
+      ]);
+      const revenue = orders.filter((o:any) => o.payment?.status === 'paid').reduce((sum:number,o:any)=>sum+Number(o.total||0),0);
+      setStats({ recorded: recorded.length, training: training.length, trainees: trainees.length, orders: orders.length, revenue, categories: categories.length });
+      setRecent(orders.slice(0,5));
     }
-
-    loadDashboard();
-
-    return () => {
-      mounted = false;
-    };
+    void load();
   }, []);
 
   return (
-    <main
-      dir="rtl"
-      style={{
-        minHeight: '100vh',
-        background: '#f8fafc',
-        padding: '32px',
-      }}
-    >
-      <div
-        style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-        }}
-      >
-        <header
-          style={{
-            marginBottom: '32px',
-          }}
-        >
-          <h1
-            style={{
-              margin: 0,
-              fontSize: '32px',
-              fontWeight: 700,
-              color: '#111827',
-            }}
-          >
-            لوحة التحكم
-          </h1>
+    <main className="admin-page" dir="rtl">
+      <header className="admin-page-header">
+        <div><div className="eyebrow">Admin</div><h1>لوحة التحكم</h1><p>نظرة عامة على الدورات والبرامج والمتدربين والطلبات.</p></div>
+        <div className="admin-actions">
+          <Link className="admin-btn admin-btn-primary" href="/admin/courses">+ إضافة دورة مسجلة</Link>
+          <Link className="admin-btn admin-btn-gold" href="/admin/programs">+ إضافة برنامج تدريبي</Link>
+        </div>
+      </header>
 
-          <p
-            style={{
-              marginTop: '8px',
-              marginBottom: 0,
-              color: '#6b7280',
-              fontSize: '16px',
-            }}
-          >
-            إدارة منصة Impact Training
-          </p>
-        </header>
+      <section className="admin-stats">
+        <div className="admin-stat"><div className="admin-stat-label">الدورات المسجلة</div><div className="admin-stat-value">{stats.recorded}</div></div>
+        <div className="admin-stat"><div className="admin-stat-label">البرامج التدريبية</div><div className="admin-stat-value">{stats.training}</div></div>
+        <div className="admin-stat"><div className="admin-stat-label">المتدربون</div><div className="admin-stat-value">{stats.trainees}</div></div>
+        <div className="admin-stat"><div className="admin-stat-label">إجمالي الطلبات</div><div className="admin-stat-value">{stats.orders}</div></div>
+      </section>
 
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '20px',
-          }}
-        >
-          {stats.map((stat) => (
-            <a
-              key={stat.title}
-              href={stat.href}
-              style={{
-                display: 'block',
-                textDecoration: 'none',
-                background: '#ffffff',
-                border: '1px solid #e5e7eb',
-                borderRadius: '16px',
-                padding: '24px',
-                transition: 'transform 0.15s ease',
-              }}
-            >
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: '15px',
-                  marginBottom: '12px',
-                }}
-              >
-                {stat.title}
-              </div>
-
-              <div
-                style={{
-                  fontSize: '36px',
-                  lineHeight: 1,
-                  fontWeight: 700,
-                  color: '#111827',
-                }}
-              >
-                {loading ? '...' : stat.value}
-              </div>
-            </a>
-          ))}
-        </section>
-
-        <section
-          style={{
-            marginTop: '32px',
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
-            borderRadius: '16px',
-            padding: '24px',
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              fontSize: '20px',
-              fontWeight: 700,
-              color: '#111827',
-            }}
-          >
-            الوصول السريع
-          </h2>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: '12px',
-              marginTop: '20px',
-            }}
-          >
-            <a
-              href="/admin/courses"
-              style={quickLinkStyle}
-            >
-              إدارة الدورات
-            </a>
-
-            <a
-              href="/admin/programs"
-              style={quickLinkStyle}
-            >
-              إدارة البرامج
-            </a>
-
-            <a
-              href="/admin/categories"
-              style={quickLinkStyle}
-            >
-              التصنيفات
-            </a>
-
-            <a
-              href="/admin/students"
-              style={quickLinkStyle}
-            >
-              المتدربون
-            </a>
-
-            <a
-              href="/admin/orders"
-              style={quickLinkStyle}
-            >
-              الطلبات
-            </a>
-
-            <a
-              href="/admin/coupons"
-              style={quickLinkStyle}
-            >
-              الكوبونات
-            </a>
-
-            <a
-              href="/admin/settings"
-              style={quickLinkStyle}
-            >
-              الإعدادات
-            </a>
+      <div className="admin-dashboard-grid">
+        <section className="admin-card">
+          <div className="admin-modal-header"><h2>أحدث الطلبات</h2><Link href="/admin/orders" className="admin-btn admin-btn-light">عرض الكل</Link></div>
+          <div className="admin-list">
+            {recent.length === 0 ? <div className="admin-empty">لا توجد طلبات.</div> : recent.map((o:any)=><div className="admin-list-row" key={o.id}><div><strong>{o.customer?.name || 'عميل'}</strong><br/><span>{o.items?.[0]?.title || 'طلب'}</span></div><div><strong>{Number(o.total||0).toLocaleString('ar-SA')} SAR</strong><br/><span>{o.status}</span></div></div>)}
           </div>
         </section>
+        <aside className="admin-card">
+          <div className="admin-modal-header"><h2>اختصارات</h2></div>
+          <div className="admin-quick-grid">
+            <Link className="admin-quick" href="/admin/categories">الفئات<br/><small>{stats.categories} فئات</small></Link>
+            <Link className="admin-quick" href="/admin/students">المتدربون<br/><small>{stats.trainees} حساب</small></Link>
+            <Link className="admin-quick" href="/admin/coupons">الكوبونات</Link>
+            <Link className="admin-quick" href="/admin/settings">الإعدادات</Link>
+          </div>
+          <div style={{padding:'0 14px 18px',color:'#6b7890',fontSize:12}}>الإيرادات المدفوعة: <strong style={{color:'#002060'}}>{stats.revenue.toLocaleString('ar-SA')} SAR</strong></div>
+        </aside>
       </div>
     </main>
   );
 }
-
-const quickLinkStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minHeight: '52px',
-  padding: '12px 16px',
-  borderRadius: '10px',
-  background: '#f3f4f6',
-  color: '#111827',
-  textDecoration: 'none',
-  fontSize: '14px',
-  fontWeight: 600,
-};

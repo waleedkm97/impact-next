@@ -4,8 +4,6 @@
  */
 
 import { Settings } from '@/types/settings';
-import { localStorageAdapter } from '@/lib/storage/local-storage';
-import { STORAGE_KEYS } from '@/lib/storage/storage-keys';
 
 export interface ISettingsRepository {
   findAll(): Promise<Settings>;
@@ -152,19 +150,11 @@ const DEFAULT_SETTINGS: Settings = {
   updatedAt: new Date(),
 };
 
+let settings: Settings = structuredClone(DEFAULT_SETTINGS);
+
 export class SettingsRepository implements ISettingsRepository {
-  private storageKey = STORAGE_KEYS.SETTINGS;
-
   async findAll(): Promise<Settings> {
-    const stored = localStorageAdapter.get<Settings>(this.storageKey);
-
-    if (!stored) {
-      const defaults = this.cloneDefaults();
-      localStorageAdapter.set(this.storageKey, defaults);
-      return defaults;
-    }
-
-    return this.normalizeSettings(stored);
+    return this.normalizeSettings(settings);
   }
 
   async update(settings: Partial<Settings>): Promise<Settings> {
@@ -286,7 +276,7 @@ export class SettingsRepository implements ISettingsRepository {
       updatedAt: new Date(),
     };
 
-    localStorageAdapter.set(this.storageKey, updated);
+    settings = updated;
 
     return updated;
   }
@@ -294,7 +284,7 @@ export class SettingsRepository implements ISettingsRepository {
   async reset(): Promise<Settings> {
     const defaults = this.cloneDefaults();
 
-    localStorageAdapter.set(this.storageKey, defaults);
+    settings = defaults;
 
     return defaults;
   }

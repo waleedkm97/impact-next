@@ -1,691 +1,259 @@
-/**
- * Course Repository
- *
- * Implements course and lesson data access using the LocalStorage adapter.
- *
- * Legacy compatibility:
- * - impact_courses_v1
- * - impact_recorded_courses_v1
- *
- * This repository intentionally keeps the storage implementation isolated
- * from the UI so it can later be replaced by an API/database.
- */
-
-import {
+import type {
   Course,
   CourseLesson,
   CourseQuery,
   CourseFilter,
+  LessonQuestion,
 } from '@/types/course';
-import {
-  LocalStorageAdapter,
-} from '@/lib/storage/local-storage';
+import { DEFAULT_CATEGORIES, DEFAULT_RECORDED_LESSONS, SEED_COURSES } from '@/lib/data/seed-data';
+import { browserDbGet, browserDbSet, migrateLegacyData } from '@/lib/data/browser-db';
 
 export interface ICourseRepository {
   findById(id: string): Promise<Course | null>;
   findBySlug(slug: string): Promise<Course | null>;
   findAll(query?: CourseQuery): Promise<Course[]>;
-  create(
-    course: Omit<Course, 'id' | 'createdAt' | 'updatedAt'>
-  ): Promise<Course>;
+  create(course: Omit<Course, 'id' | 'createdAt' | 'updatedAt'>): Promise<Course>;
   update(id: string, course: Partial<Course>): Promise<Course>;
   delete(id: string): Promise<void>;
-
   findLessonById(lessonId: string): Promise<CourseLesson | null>;
   findLessonsByCourseId(courseId: string): Promise<CourseLesson[]>;
-  createLesson(
-    courseId: string,
-    lesson: Omit<CourseLesson, 'id' | 'courseId' | 'createdAt' | 'updatedAt'>
-  ): Promise<CourseLesson>;
-  updateLesson(
-    lessonId: string,
-    lesson: Partial<CourseLesson>
-  ): Promise<CourseLesson>;
+  createLesson(courseId: string, lesson: Omit<CourseLesson, 'id' | 'courseId' | 'createdAt' | 'updatedAt'>): Promise<CourseLesson>;
+  updateLesson(lessonId: string, lesson: Partial<CourseLesson>): Promise<CourseLesson>;
   deleteLesson(lessonId: string): Promise<void>;
-
   search(query: string, limit?: number): Promise<Course[]>;
-  findByCategory(
-    categoryId: string,
-    query?: CourseQuery
-  ): Promise<Course[]>;
-  findByType(
-    type: 'recorded' | 'training' | 'public',
-    query?: CourseQuery
-  ): Promise<Course[]>;
+  findByCategory(categoryId: string, query?: CourseQuery): Promise<Course[]>;
+  findByType(type: 'recorded' | 'training' | 'public', query?: CourseQuery): Promise<Course[]>;
   findFeatured(limit?: number): Promise<Course[]>;
   findPublished(query?: CourseQuery): Promise<Course[]>;
-
   getCount(filter?: CourseFilter): Promise<number>;
   getPopularCourses(limit?: number): Promise<Course[]>;
-
   bulkUpdate(ids: string[], updates: Partial<Course>): Promise<void>;
   bulkDelete(ids: string[]): Promise<void>;
 }
 
-const COURSES_KEY = 'impact_courses_v1';
-const RECORDED_COURSES_KEY = 'impact_recorded_courses_v1';
+function slugify(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}-]/gu, '').replace(/-+/g, '-');
+}
 
-const storage = new LocalStorageAdapter('');
+function date(value: unknown, fallback = new Date()) {
+  const d = value instanceof Date ? value : new Date(String(value ?? ''));
+  return Number.isNaN(d.getTime()) ? fallback : d;
+}
 
-function reviveCourse(course: Course): Course {
+function durationToSeconds(value: unknown) {
+  if (typeof value === 'number') return value;
+  const match = String(value ?? '').match(/(\d+)/);
+  return match ? Number(match[1]) * 60 : undefined;
+}
+
+function mapLegacyLesson(raw: any, courseId: string, index: number): CourseLesson {
+  const questions: LessonQuestion[] = raw.type === 'quiz' && raw.question
+    ? [{
+        id: `${raw.id}-q1`,
+        lessonId: raw.id,
+        question: raw.question,
+        type: 'multiple-choice',
+        options: raw.options ?? [],
+        correctAnswer: String(raw.correctIndex ?? 0),
+        explanation: raw.explanation,
+        order: 1,
+        points: 1,
+      }]
+    : [];
+
   return {
-    ...course,
-    createdAt: new Date(course.createdAt),
-    updatedAt: new Date(course.updatedAt),
-
-    lessons: (course.lessons ?? []).map((lesson) => ({
-      ...lesson,
-      createdAt: new Date(lesson.createdAt),
-      updatedAt: new Date(lesson.updatedAt),
-    })),
-
-    schedules: (course.schedules ?? []).map((schedule) => ({
-      ...schedule,
-      startDate: new Date(schedule.startDate),
-      endDate: new Date(schedule.endDate),
-      createdAt: new Date(schedule.createdAt),
-      updatedAt: new Date(schedule.updatedAt),
-    })),
-
-    assessments: (course.assessments ?? []).map((assessment) => ({
-      ...assessment,
-      createdAt: new Date(assessment.createdAt),
-      updatedAt: new Date(assessment.updatedAt),
-    })),
+    id: raw.id,
+    courseId,
+    title: raw.title ?? `درس ${index + 1}`,
+    description: raw.description,
+    type: raw.type === 'quiz' ? 'quiz' : 'video',
+    order: raw.order ?? index + 1,
+    videoId: raw.videoId ?? raw.videoUrl,
+    videoDuration: raw.videoDuration ?? durationToSeconds(raw.duration),
+    questions,
+    afterLessonId: raw.afterLessonId,
+    createdAt: date(raw.createdAt),
+    updatedAt: date(raw.updatedAt),
   };
 }
 
-function normalizeCourse(
-  course: Partial<Course>,
-  existing?: Course
-): Course {
-  const now = new Date();
+function buildSeedCourses(): Course[] {
+  return (SEED_COURSES as any[]).map((raw) => {
+    const isRecorded = raw.type === 'recorded';
+    const delivery = isRecorded ? 'online' : raw.delivery === 'online' ? 'online' : 'in-person';
+    const category = (DEFAULT_CATEGORIES as any[]).find((c:any) => c.id === raw.categoryId || c.name === raw.category);
+    const categoryId = raw.categoryId ?? category?.id ?? slugify(raw.category ?? '');
+    const rawLessons = isRecorded && Array.isArray(raw.lessons) && raw.lessons.length
+      ? raw.lessons
+      : isRecorded ? DEFAULT_RECORDED_LESSONS : [];
+    const lessons: CourseLesson[] = rawLessons.map((lesson: any, index: number) => mapLegacyLesson(lesson, raw.id, index));
+    const now = date(raw.createdAt);
 
-  const merged = {
-    ...existing,
-    ...course,
-  } as Course;
-
-  const lessons = (merged.lessons ?? []).map((lesson, index) => ({
-    ...lesson,
-    order: typeof lesson.order === 'number' ? lesson.order : index,
-  }));
-
-  const videosCount = lessons.filter(
-    (lesson) => lesson.type === 'video'
-  ).length;
-
-  return {
-    ...merged,
-
-    id: merged.id || `course_${Date.now()}`,
-
-    title: merged.title || '',
-    slug:
-      merged.slug ||
-      String(merged.title || '')
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^\w\u0600-\u06FF-]/g, ''),
-
-    description: merged.description || '',
-    objectives: merged.objectives ?? [],
-    outcomes: merged.outcomes ?? [],
-
-    lessons,
-    videosCount,
-
-    featured: merged.featured ?? false,
-    published: merged.published ?? false,
-    status:
-      merged.status ||
-      (merged.published ? 'published' : 'draft'),
-
-    certificateSettings:
-      merged.certificateSettings ?? {
-        enabled: false,
+    return {
+      id: raw.id,
+      title: raw.title,
+      slug: raw.slug ?? slugify(raw.title),
+      description: raw.fullDescription ?? raw.description ?? '',
+      shortDescription: raw.shortDescription,
+      categoryId,
+      type: isRecorded ? 'recorded' : 'training',
+      delivery,
+      cities: raw.cities ?? [],
+      price: Number(raw.price ?? 0),
+      oldPrice: raw.oldPrice == null ? undefined : Number(raw.oldPrice),
+      discount: typeof raw.discount === 'number' ? raw.discount : undefined,
+      currency: 'SAR',
+      days: Number(raw.days ?? 0),
+      hours: typeof raw.hours === 'number' ? raw.hours : Number(String(raw.hours ?? '').match(/\d+(?:\.\d+)?/)?.[0] ?? 0),
+      videosCount: lessons.filter((l) => l.type === 'video').length,
+      objectives: raw.objectives ?? [],
+      outcomes: raw.outcomes ?? [],
+      outline: Array.isArray(raw.outline) ? raw.outline.join('\n') : raw.outline,
+      lessons,
+      schedules: [],
+      assessments: [],
+      audience: raw.audience,
+      methodology: raw.methodology,
+      image: raw.image,
+      featured: Boolean(raw.featured),
+      published: raw.published !== false,
+      status: raw.published === false ? 'draft' : 'published',
+      certificateSettings: {
+        enabled: raw.hasCertificate !== false,
         autoGenerate: false,
         requireCompletion: true,
         requireAssessmentPass: false,
       },
+      createdAt: now,
+      updatedAt: now,
+    } satisfies Course;
+  });
+}
 
-    createdAt: existing?.createdAt
-      ? new Date(existing.createdAt)
-      : new Date(course.createdAt ?? now),
+let courses: Course[] = buildSeedCourses();
+let hydrated = false;
+let hydration: Promise<void> | null = null;
+async function ensureHydrated(){ if(hydrated) return; await migrateLegacyData(); if(!hydration){ hydration=(async()=>{ const saved=await browserDbGet<Course[]>('courses'); if(saved !== null) courses=saved.map(normalizeCourse); hydrated=true; })().catch(()=>{hydrated=true;}); } await hydration; }
+function normalizeCourse(c: Course): Course { return {...c, createdAt:date(c.createdAt), updatedAt:date(c.updatedAt), lessons:(c.lessons??[]).map(l=>({...l,createdAt:date(l.createdAt),updatedAt:date(l.updatedAt),questions:l.questions?.map(q=>({...q}))})), schedules:(c.schedules??[]).map(s=>({...s,startDate:date(s.startDate),endDate:date(s.endDate),createdAt:date(s.createdAt),updatedAt:date(s.updatedAt)})), assessments:(c.assessments??[]).map(a=>({...a,createdAt:date(a.createdAt),updatedAt:date(a.updatedAt)}))}; }
+async function persist(){ await browserDbSet('courses', courses); }
 
-    updatedAt: now,
+function cloneCourse(course: Course): Course {
+  return {
+    ...course,
+    objectives: [...course.objectives],
+    outcomes: [...course.outcomes],
+    lessons: (course.lessons ?? []).map((lesson) => ({ ...lesson, questions: lesson.questions?.map((q) => ({ ...q, options: q.options ? [...q.options] : undefined })) })),
+    schedules: [...(course.schedules ?? [])],
+    assessments: [...(course.assessments ?? [])],
   };
 }
 
+function matches(course: Course, filter?: CourseFilter) {
+  if (!filter) return true;
+  if (filter.type && course.type !== filter.type) return false;
+  if (filter.delivery && course.delivery !== filter.delivery) return false;
+  if (filter.categoryId && course.categoryId !== filter.categoryId) return false;
+  if (filter.city && !(course.cities ?? []).includes(filter.city)) return false;
+  if (typeof filter.minPrice === 'number' && course.price < filter.minPrice) return false;
+  if (typeof filter.maxPrice === 'number' && course.price > filter.maxPrice) return false;
+  if (typeof filter.featured === 'boolean' && course.featured !== filter.featured) return false;
+  if (typeof filter.published === 'boolean' && course.published !== filter.published) return false;
+  if (filter.searchQuery) {
+    const q = filter.searchQuery.trim().toLowerCase();
+    const text = [course.title, course.description, course.shortDescription, course.categoryId, course.audience, ...(course.objectives ?? []), ...(course.outcomes ?? [])].filter(Boolean).join(' ').toLowerCase();
+    if (!text.includes(q)) return false;
+  }
+  return true;
+}
+
 export class CourseRepository implements ICourseRepository {
-  private readCourses(key: string): Course[] {
-    const data = storage.get<Course[]>(key);
+  async findById(id: string) { await ensureHydrated(); const c = courses.find((x) => x.id === id); return c ? cloneCourse(c) : null; }
+  async findBySlug(slug: string) { await ensureHydrated(); const normalized = slugify(slug); const c = courses.find((x) => x.slug === normalized); return c ? cloneCourse(c) : null; }
 
-    if (!data || !Array.isArray(data)) {
-      return [];
-    }
-
-    return data.map(reviveCourse);
-  }
-
-  private readAllCourses(): Course[] {
-    const normalCourses = this.readCourses(COURSES_KEY);
-    const recordedCourses = this.readCourses(RECORDED_COURSES_KEY);
-
-    const map = new Map<string, Course>();
-
-    [...normalCourses, ...recordedCourses].forEach((course) => {
-      map.set(course.id, course);
-    });
-
-    return Array.from(map.values());
-  }
-
-  private writeCourseCollections(courses: Course[]): void {
-    const recorded = courses.filter(
-      (course) => course.type === 'recorded'
-    );
-
-    const training = courses.filter(
-      (course) => course.type !== 'recorded'
-    );
-
-    storage.set(COURSES_KEY, training);
-    storage.set(RECORDED_COURSES_KEY, recorded);
-  }
-
-  private matchesFilter(
-    course: Course,
-    filter?: CourseFilter
-  ): boolean {
-    if (!filter) {
-      return true;
-    }
-
-    if (filter.type && course.type !== filter.type) {
-      return false;
-    }
-
-    if (filter.delivery && course.delivery !== filter.delivery) {
-      return false;
-    }
-
-    if (
-      filter.categoryId &&
-      course.categoryId !== filter.categoryId
-    ) {
-      return false;
-    }
-
-    if (
-      filter.city &&
-      !(course.cities ?? []).includes(filter.city)
-    ) {
-      return false;
-    }
-
-    if (
-      typeof filter.minPrice === 'number' &&
-      course.price < filter.minPrice
-    ) {
-      return false;
-    }
-
-    if (
-      typeof filter.maxPrice === 'number' &&
-      course.price > filter.maxPrice
-    ) {
-      return false;
-    }
-
-    if (
-      typeof filter.featured === 'boolean' &&
-      course.featured !== filter.featured
-    ) {
-      return false;
-    }
-
-    if (
-      typeof filter.published === 'boolean' &&
-      course.published !== filter.published
-    ) {
-      return false;
-    }
-
-    if (filter.searchQuery) {
-      const search = filter.searchQuery
-        .toLowerCase()
-        .trim();
-
-      const haystack = [
-        course.title,
-        course.description,
-        course.shortDescription,
-        course.categoryId,
-        ...(course.objectives ?? []),
-        ...(course.outcomes ?? []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      if (!haystack.includes(search)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  async findById(id: string): Promise<Course | null> {
-    return (
-      this.readAllCourses().find(
-        (course) => course.id === id
-      ) ?? null
-    );
-  }
-
-  async findBySlug(slug: string): Promise<Course | null> {
-    const normalizedSlug = slug.toLowerCase().trim();
-
-    return (
-      this.readAllCourses().find(
-        (course) =>
-          course.slug.toLowerCase() === normalizedSlug
-      ) ?? null
-    );
-  }
-
-  async findAll(query?: CourseQuery): Promise<Course[]> {
-    let courses = this.readAllCourses().filter((course) =>
-      this.matchesFilter(course, query?.filter)
-    );
-
-    const sort = query?.sort ?? 'createdAt';
+  async findAll(query?: CourseQuery) { await ensureHydrated();
+    let result = courses.filter((c) => matches(c, query?.filter));
     const order = query?.order ?? 'desc';
-
-    courses.sort((a, b) => {
-      let comparison = 0;
-
-      switch (sort) {
-        case 'title':
-          comparison = a.title.localeCompare(
-            b.title,
-            'ar'
-          );
-          break;
-
-        case 'price':
-          comparison = a.price - b.price;
-          break;
-
-        case 'popularity':
-          comparison =
-            (b.featured ? 1 : 0) -
-            (a.featured ? 1 : 0);
-          break;
-
-        case 'createdAt':
-        default:
-          comparison =
-            new Date(a.createdAt).getTime() -
-            new Date(b.createdAt).getTime();
-          break;
-      }
-
-      return order === 'asc'
-        ? comparison
-        : -comparison;
+    result.sort((a, b) => {
+      let n = 0;
+      if (query?.sort === 'title') n = a.title.localeCompare(b.title, 'ar');
+      else if (query?.sort === 'price') n = a.price - b.price;
+      else if (query?.sort === 'popularity') n = Number(b.featured) - Number(a.featured);
+      else n = a.createdAt.getTime() - b.createdAt.getTime();
+      return order === 'asc' ? n : -n;
     });
-
     const offset = query?.offset ?? 0;
-    const limit = query?.limit;
-
-    if (typeof limit === 'number') {
-      return courses.slice(offset, offset + limit);
-    }
-
-    return courses.slice(offset);
+    const end = typeof query?.limit === 'number' ? offset + query.limit : undefined;
+    return result.slice(offset, end).map(cloneCourse);
   }
 
-  async create(
-    course: Omit<Course, 'id' | 'createdAt' | 'updatedAt'>
-  ): Promise<Course> {
-    const courses = this.readAllCourses();
-
-    const newCourse = normalizeCourse({
-      ...course,
-      id: `course_${Date.now()}`,
-    });
-
-    courses.push(newCourse);
-
-    this.writeCourseCollections(courses);
-
-    return newCourse;
+  async create(input: Omit<Course, 'id' | 'createdAt' | 'updatedAt'>) { await ensureHydrated();
+    const now = new Date();
+    const created: Course = { ...input, id: (input as any).id ?? `course-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, slug: input.slug || slugify(input.title), createdAt: now, updatedAt: now, lessons: input.lessons ?? [], schedules: input.schedules ?? [], assessments: input.assessments ?? [] };
+    courses = [...courses, created];
+    await persist();
+    return cloneCourse(created);
   }
 
-  async update(
-    id: string,
-    updates: Partial<Course>
-  ): Promise<Course> {
-    const courses = this.readAllCourses();
-    const index = courses.findIndex(
-      (course) => course.id === id
-    );
-
-    if (index === -1) {
-      throw new Error(`Course not found: ${id}`);
-    }
-
-    const updated = normalizeCourse(
-      updates,
-      courses[index]
-    );
-
+  async update(id: string, updates: Partial<Course>) { await ensureHydrated();
+    const index = courses.findIndex((c) => c.id === id);
+    if (index < 0) throw new Error(`Course not found: ${id}`);
+    const updated = { ...courses[index], ...updates, id, updatedAt: new Date() };
     courses[index] = updated;
-
-    this.writeCourseCollections(courses);
-
-    return updated;
+    await persist();
+    return cloneCourse(updated);
   }
 
-  async delete(id: string): Promise<void> {
-    const courses = this.readAllCourses().filter(
-      (course) => course.id !== id
-    );
+  async delete(id: string) { await ensureHydrated(); courses = courses.filter((c) => c.id !== id); await persist(); }
 
-    this.writeCourseCollections(courses);
+  async findLessonById(lessonId: string) { await ensureHydrated(); for (const c of courses) { const l = c.lessons?.find((x) => x.id === lessonId); if (l) return { ...l }; } return null; }
+  async findLessonsByCourseId(courseId: string) { await ensureHydrated(); const c = courses.find((x) => x.id === courseId); return [...(c?.lessons ?? [])].sort((a,b) => a.order-b.order).map((l) => ({ ...l })); }
+
+  async createLesson(courseId: string, input: Omit<CourseLesson, 'id' | 'courseId' | 'createdAt' | 'updatedAt'>) { await ensureHydrated();
+    const course = courses.find((c) => c.id === courseId);
+    if (!course) throw new Error(`Course not found: ${courseId}`);
+    const now = new Date();
+    const id = `lesson-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    const lesson: CourseLesson = { ...input, id, courseId, order: input.order ?? (course.lessons?.length ?? 0) + 1, createdAt: now, updatedAt: now, questions: input.questions?.map((q) => ({ ...q, lessonId: id })) };
+    course.lessons = [...(course.lessons ?? []), lesson];
+    course.videosCount = course.lessons.filter((l) => l.type === 'video').length;
+    course.updatedAt = now;
+    await persist();
+    return { ...lesson };
   }
 
-  async findLessonById(
-    lessonId: string
-  ): Promise<CourseLesson | null> {
-    for (const course of this.readAllCourses()) {
-      const lesson = (course.lessons ?? []).find(
-        (item) => item.id === lessonId
-      );
-
-      if (lesson) {
-        return lesson;
-      }
-    }
-
-    return null;
-  }
-
-  async findLessonsByCourseId(
-    courseId: string
-  ): Promise<CourseLesson[]> {
-    const course = await this.findById(courseId);
-
-    if (!course) {
-      return [];
-    }
-
-    return [...(course.lessons ?? [])].sort(
-      (a, b) => a.order - b.order
-    );
-  }
-
-  async createLesson(
-    courseId: string,
-    lesson: Omit<
-      CourseLesson,
-      'id' | 'courseId' | 'createdAt' | 'updatedAt'
-    >
-  ): Promise<CourseLesson> {
-    const course = await this.findById(courseId);
-
-    if (!course) {
-      throw new Error(`Course not found: ${courseId}`);
-    }
-
-    const lessons = course.lessons ?? [];
-
-    const newLesson: CourseLesson = {
-      ...lesson,
-      id: `lesson_${Date.now()}`,
-      courseId,
-      order:
-        typeof lesson.order === 'number'
-          ? lesson.order
-          : lessons.length,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const updatedLessons = [...lessons, newLesson];
-
-    await this.update(courseId, {
-      lessons: updatedLessons,
-    });
-
-    return newLesson;
-  }
-
-  async updateLesson(
-    lessonId: string,
-    updates: Partial<CourseLesson>
-  ): Promise<CourseLesson> {
-    const courses = this.readAllCourses();
-
+  async updateLesson(lessonId: string, updates: Partial<CourseLesson>) { await ensureHydrated();
     for (const course of courses) {
-      const lessonIndex = (
-        course.lessons ?? []
-      ).findIndex(
-        (lesson) => lesson.id === lessonId
-      );
-
-      if (lessonIndex === -1) {
-        continue;
-      }
-
-      const existing = course.lessons![lessonIndex];
-
-      const updatedLesson: CourseLesson = {
-        ...existing,
-        ...updates,
-        id: existing.id,
-        courseId: existing.courseId,
-        updatedAt: new Date(),
-      };
-
-      course.lessons![lessonIndex] = updatedLesson;
-
-      const updatedCourse = normalizeCourse(
-        {
-          ...course,
-          lessons: course.lessons,
-        },
-        course
-      );
-
-      const courseIndex = courses.findIndex(
-        (item) => item.id === course.id
-      );
-
-      courses[courseIndex] = updatedCourse;
-
-      this.writeCourseCollections(courses);
-
-      return updatedLesson;
+      const index = course.lessons?.findIndex((l) => l.id === lessonId) ?? -1;
+      if (index < 0) continue;
+      const existing = course.lessons![index];
+      const updated: CourseLesson = { ...existing, ...updates, id: lessonId, courseId: existing.courseId, updatedAt: new Date(), questions: updates.questions?.map((q) => ({ ...q, lessonId })) ?? existing.questions };
+      course.lessons![index] = updated;
+      course.videosCount = course.lessons!.filter((l) => l.type === 'video').length;
+      course.updatedAt = new Date();
+      await persist();
+      return { ...updated };
     }
-
     throw new Error(`Lesson not found: ${lessonId}`);
   }
 
-  async deleteLesson(
-    lessonId: string
-  ): Promise<void> {
-    const courses = this.readAllCourses();
-
-    let found = false;
-
+  async deleteLesson(lessonId: string) { await ensureHydrated();
     for (const course of courses) {
-      const originalLength =
-        course.lessons?.length ?? 0;
-
-      course.lessons = (course.lessons ?? [])
-        .filter((lesson) => lesson.id !== lessonId)
-        .map((lesson, index) => ({
-          ...lesson,
-          order: index,
-        }));
-
-      if (course.lessons.length !== originalLength) {
-        found = true;
-
-        const normalized = normalizeCourse(
-          {
-            ...course,
-            lessons: course.lessons,
-          },
-          course
-        );
-
-        const index = courses.findIndex(
-          (item) => item.id === course.id
-        );
-
-        courses[index] = normalized;
-        break;
-      }
-    }
-
-    if (found) {
-      this.writeCourseCollections(courses);
+      const before = course.lessons?.length ?? 0;
+      if (!course.lessons) continue;
+      course.lessons = course.lessons.filter((l) => l.id !== lessonId).map((l, i) => ({ ...l, order: i + 1 }));
+      if (course.lessons.length !== before) { course.videosCount = course.lessons.filter((l) => l.type === 'video').length; course.updatedAt = new Date(); await persist(); return; }
     }
   }
 
-  async search(
-    query: string,
-    limit = 20
-  ): Promise<Course[]> {
-    const searchQuery = query.toLowerCase().trim();
-
-    if (!searchQuery) {
-      return this.findAll({ limit });
-    }
-
-    const courses = this.readAllCourses().filter(
-      (course) => {
-        const text = [
-          course.title,
-          course.description,
-          course.shortDescription,
-          ...(course.objectives ?? []),
-          ...(course.outcomes ?? []),
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-
-        return text.includes(searchQuery);
-      }
-    );
-
-    return courses.slice(0, limit);
-  }
-
-  async findByCategory(
-    categoryId: string,
-    query?: CourseQuery
-  ): Promise<Course[]> {
-    return this.findAll({
-      ...query,
-      filter: {
-        ...query?.filter,
-        categoryId,
-      },
-    });
-  }
-
-  async findByType(
-    type: 'recorded' | 'training' | 'public',
-    query?: CourseQuery
-  ): Promise<Course[]> {
-    return this.findAll({
-      ...query,
-      filter: {
-        ...query?.filter,
-        type,
-      },
-    });
-  }
-
-  async findFeatured(
-    limit = 10
-  ): Promise<Course[]> {
-    return this.findAll({
-      filter: {
-        featured: true,
-      },
-      limit,
-    });
-  }
-
-  async findPublished(
-    query?: CourseQuery
-  ): Promise<Course[]> {
-    return this.findAll({
-      ...query,
-      filter: {
-        ...query?.filter,
-        published: true,
-      },
-    });
-  }
-
-  async getCount(
-    filter?: CourseFilter
-  ): Promise<number> {
-    return this.readAllCourses().filter((course) =>
-      this.matchesFilter(course, filter)
-    ).length;
-  }
-
-  async getPopularCourses(
-    limit = 10
-  ): Promise<Course[]> {
-    return this.findAll({
-      sort: 'popularity',
-      order: 'desc',
-      limit,
-    });
-  }
-
-  async bulkUpdate(
-    ids: string[],
-    updates: Partial<Course>
-  ): Promise<void> {
-    const idSet = new Set(ids);
-    const courses = this.readAllCourses();
-
-    const updatedCourses = courses.map((course) => {
-      if (!idSet.has(course.id)) {
-        return course;
-      }
-
-      return normalizeCourse(updates, course);
-    });
-
-    this.writeCourseCollections(updatedCourses);
-  }
-
-  async bulkDelete(
-    ids: string[]
-  ): Promise<void> {
-    const idSet = new Set(ids);
-
-    const courses = this.readAllCourses().filter(
-      (course) => !idSet.has(course.id)
-    );
-
-    this.writeCourseCollections(courses);
-  }
+  async search(query: string, limit = 20) { await ensureHydrated(); return this.findAll({ filter: { searchQuery: query }, limit }); }
+  async findByCategory(categoryId: string, query?: CourseQuery) { await ensureHydrated(); return this.findAll({ ...query, filter: { ...query?.filter, categoryId } }); }
+  async findByType(type: 'recorded' | 'training' | 'public', query?: CourseQuery) { await ensureHydrated(); return this.findAll({ ...query, filter: { ...query?.filter, type } }); }
+  async findFeatured(limit = 10) { await ensureHydrated(); return this.findAll({ filter: { featured: true }, limit }); }
+  async findPublished(query?: CourseQuery) { await ensureHydrated(); return this.findAll({ ...query, filter: { ...query?.filter, published: true } }); }
+  async getCount(filter?: CourseFilter) { await ensureHydrated(); return courses.filter((c) => matches(c, filter)).length; }
+  async getPopularCourses(limit = 10) { await ensureHydrated(); return this.findAll({ sort: 'popularity', order: 'desc', limit }); }
+  async bulkUpdate(ids: string[], updates: Partial<Course>) { await ensureHydrated(); const set = new Set(ids); courses = courses.map((c) => set.has(c.id) ? { ...c, ...updates, updatedAt: new Date() } : c); await persist(); }
+  async bulkDelete(ids: string[]) { await ensureHydrated(); const set = new Set(ids); courses = courses.filter((c) => !set.has(c.id)); await persist(); }
 }
 
-export const courseRepository =
-  new CourseRepository();
+export const courseRepository = new CourseRepository();

@@ -139,6 +139,11 @@ export interface Course {
   // Certificate settings
   certificateSettings: CertificateSettings;
   
+  materialsEnabled?: boolean;
+  preAssessmentEnabled?: boolean;
+  postAssessmentEnabled?: boolean;
+  courseEvaluationEnabled?: boolean;
+  attendanceEnabled?: boolean;
   // Status and flags
   featured: boolean;
   published: boolean;

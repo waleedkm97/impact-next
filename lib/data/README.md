@@ -14,7 +14,7 @@ The data layer is designed with a repository pattern that separates business log
 ## Current Implementation
 
 - **Repository Interfaces**: Define contracts for data access operations
-- **LocalStorage Adapter**: Temporary implementation using browser localStorage
+- **In-Memory Repository Layer**: Temporary implementation using a shared in-memory state during development
 - **Future**: Will be replaced with API/database implementation
 
 ## Repository Structure
