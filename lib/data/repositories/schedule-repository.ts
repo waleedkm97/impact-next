@@ -31,6 +31,7 @@ export interface IScheduleRepository {
         startDate?: string;
         endDate?: string;
         cities?: string[];
+        courseIds?: string[];
     }): Promise<Schedule[]>;
 }
 let schedules: Schedule[] = [];
@@ -41,7 +42,34 @@ async function ensureHydrated() { if (hydrated)
     hydration = (async () => { const saved = await browserDbGet<Schedule[]>('schedules'); if (saved !== null)
         schedules = saved.map(normalizeSchedule); hydrated = true; })().catch(() => { hydrated = true; });
 } await hydration; }
-function normalizeSchedule(s: Schedule): Schedule { return { ...s, startDate: new Date(s.startDate), endDate: new Date(s.endDate), createdAt: new Date(s.createdAt), updatedAt: new Date(s.updatedAt), confirmationDeadline: s.confirmationDeadline ? new Date(s.confirmationDeadline) : undefined, cancellationDeadline: s.cancellationDeadline ? new Date(s.cancellationDeadline) : undefined, sessions: (s.sessions ?? []).map(x => ({ ...x, date: new Date(x.date) })) }; }
+function schedulePrice(city?: string) {
+    if (city === 'Online' || city === 'أونلاين') return 3000;
+    if (['الرياض', 'جدة', 'الدمام'].includes(city ?? '')) return 5000;
+    if (city === 'القاهرة') return 8500;
+    if (['دبي', 'البحرين', 'قطر'].includes(city ?? '')) return 16000;
+    if (['لندن', 'برشلونة', 'ميلان'].includes(city ?? '')) return 21000;
+    return undefined;
+}
+function normalizeSchedule(s: Schedule): Schedule {
+    const city = s.city === 'أونلاين' ? 'Online' : s.city;
+    const startDate = new Date(s.startDate);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 2);
+    return {
+        ...s,
+        city,
+        startDate,
+        endDate,
+        startTime: city === 'Online' ? '09:00' : '09:00',
+        endTime: city === 'Online' ? '12:00' : '14:00',
+        price: schedulePrice(city) ?? s.price,
+        createdAt: new Date(s.createdAt),
+        updatedAt: new Date(s.updatedAt),
+        confirmationDeadline: s.confirmationDeadline ? new Date(s.confirmationDeadline) : undefined,
+        cancellationDeadline: s.cancellationDeadline ? new Date(s.cancellationDeadline) : undefined,
+        sessions: (s.sessions ?? []).map(x => ({ ...x, date: new Date(x.date) })),
+    };
+}
 async function persist() { await browserDbSet('schedules', schedules); }
 const waitlists = new Map<string, string[]>();
 function matches(s: Schedule, q?: ScheduleQuery) { const f = q?.filter; if (!f)
@@ -61,11 +89,61 @@ else if (q?.sort === 'price')
 else
     n = a.startDate.getTime() - b.startDate.getTime(); return ord === 'desc' ? -n : n; }); const o = q?.offset ?? 0; return typeof q?.limit === 'number' ? r.slice(o, o + q.limit) : r.slice(o); }
 export class ScheduleRepository implements IScheduleRepository {
+    async refresh() { hydrated = false; hydration = null; await ensureHydrated(); }
     async findById(id: string) { await ensureHydrated(); return schedules.find(s => s.id === id) ?? null; }
     async findAll(q?: ScheduleQuery) { await ensureHydrated(); return sorted(schedules.filter(s => matches(s, q)), q); }
-    async create(input: any) { await ensureHydrated(); const now = new Date(); const s: Schedule = { ...input, id: input.id ?? `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, createdAt: now, updatedAt: now, sessions: input.sessions ?? [], currentParticipants: input.currentParticipants ?? 0, maxParticipants: input.maxParticipants ?? 20, status: input.status ?? 'available', published: input.published ?? true, allowWaitlist: input.allowWaitlist ?? true, requireConfirmation: input.requireConfirmation ?? false }; schedules.push(s); await persist(); return s; }
-    async update(id: string, input: any) { await ensureHydrated(); const i = schedules.findIndex(s => s.id === id); if (i < 0)
-        throw new Error('Schedule not found'); schedules[i] = { ...schedules[i], ...input, id, updatedAt: new Date() }; await persist(); return schedules[i]; }
+    async create(input: any) {
+        await ensureHydrated();
+        const now = new Date();
+        const city = input.city === 'أونلاين' ? 'Online' : input.city;
+        const startDate = new Date(input.startDate);
+        const endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 2);
+        const online = city === 'Online';
+        const s: Schedule = {
+            ...input,
+            id: input.id ?? `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            city,
+            startDate,
+            endDate,
+            startTime: '09:00',
+            endTime: online ? '12:00' : '14:00',
+            price: schedulePrice(city) ?? input.price,
+            createdAt: now,
+            updatedAt: now,
+            sessions: input.sessions ?? [],
+            currentParticipants: input.currentParticipants ?? 0,
+            maxParticipants: input.maxParticipants ?? 20,
+            status: input.status ?? 'available',
+            published: input.published ?? true,
+            allowWaitlist: input.allowWaitlist ?? true,
+            requireConfirmation: input.requireConfirmation ?? false,
+        };
+        schedules.push(s);
+        await persist();
+        return s;
+    }
+    async update(id: string, input: any) {
+        await ensureHydrated();
+        const i = schedules.findIndex(s => s.id === id);
+        if (i < 0) throw new Error('Schedule not found');
+        const merged: any = { ...schedules[i], ...input, id, updatedAt: new Date() };
+        const city = merged.city === 'أونلاين' ? 'Online' : merged.city;
+        const startDate = new Date(merged.startDate);
+        const endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 2);
+        schedules[i] = {
+            ...merged,
+            city,
+            startDate,
+            endDate,
+            startTime: '09:00',
+            endTime: city === 'Online' ? '12:00' : '14:00',
+            price: schedulePrice(city) ?? merged.price,
+        };
+        await persist();
+        return schedules[i];
+    }
     async delete(id: string) { await ensureHydrated(); schedules = schedules.filter(s => s.id !== id); waitlists.delete(id); await persist(); }
     async findByCourseId(id: string, q?: ScheduleQuery) { await ensureHydrated(); return sorted(schedules.filter(s => s.courseId === id && matches(s, q)), q); }
     async findAvailableSchedules(id: string) { await ensureHydrated(); return this.findByCourseId(id, { filter: { available: true, published: true } }); }
@@ -120,15 +198,81 @@ export class ScheduleRepository implements IScheduleRepository {
         startDate?: string;
         endDate?: string;
         cities?: string[];
-    }) { await ensureHydrated(); const start = new Date(options.startDate ?? `${new Date().getFullYear()}-01-01`); const end = new Date(options.endDate ?? `${start.getFullYear()}-12-31`); const cities = options.cities ?? ['الرياض', 'جدة', 'الدمام', 'دبي', 'القاهرة', 'البحرين', 'قطر', 'لندن', 'برشلونة', 'ميلان']; const courses = await courseRepository.findByType('training'); const created: Schedule[] = []; for (const c of courses) {
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) {
-            for (const city of cities) {
-                const price = ['الرياض', 'جدة', 'الدمام'].includes(city) ? 5000 : ['القاهرة'].includes(city) ? 8500 : ['دبي', 'البحرين', 'قطر'].includes(city) ? 16000 : 21000;
-                created.push(await this.create({ courseId: c.id, courseTitle: c.title, title: c.title, description: c.shortDescription, startDate: new Date(d), endDate: new Date(d), startTime: '09:00', endTime: '14:00', city, location: 'يظهر للمتدرب بعد التسجيل', maxParticipants: 20, currentParticipants: 0, price, status: 'available', published: true, allowWaitlist: true, requireConfirmation: false, currency: 'SAR' }));
+        courseIds?: string[];
+    }) {
+        await ensureHydrated();
+
+        const start = new Date(options.startDate ?? `${new Date().getFullYear()}-01-01T00:00:00`);
+        const end = new Date(options.endDate ?? `${start.getFullYear()}-12-31T00:00:00`);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
+
+        const cities = options.cities ?? ['الرياض', 'جدة', 'الدمام', 'دبي', 'القاهرة', 'البحرين', 'قطر', 'لندن', 'برشلونة', 'ميلان', 'Online'];
+        const requestedCourseIds = options.courseIds ? new Set(options.courseIds) : null;
+        const courses = (await courseRepository.findAll({ filter: { type: 'training', trainingKind: 'public', published: true } }))
+            .filter(course => !requestedCourseIds || requestedCourseIds.has(course.id));
+        const created: Schedule[] = [];
+
+        // Same scheduling idea as the original Impact project:
+        // each month is handled independently, all Sundays are collected,
+        // then the cities are distributed across those Sundays so every city
+        // appears at least once during every month for every public course.
+        for (const course of courses) {
+            for (let monthCursor = new Date(start.getFullYear(), start.getMonth(), 1); monthCursor <= end; monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1)) {
+                const year = monthCursor.getFullYear();
+                const month = monthCursor.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const firstSundayOffset = (7 - firstDay.getDay()) % 7;
+                const sundays: Date[] = [];
+                for (let day = 1 + firstSundayOffset; day <= lastDay.getDate(); day += 7) {
+                    const sunday = new Date(year, month, day);
+                    if (sunday >= start && sunday <= end) sundays.push(sunday);
+                }
+                if (!sundays.length) continue;
+
+                for (let cityIndex = 0; cityIndex < cities.length; cityIndex += 1) {
+                    const city = cities[cityIndex] === 'أونلاين' ? 'Online' : cities[cityIndex];
+                    const date = sundays[cityIndex % sundays.length];
+                    const dateKey = date.toISOString().slice(0, 10);
+                    const exists = schedules.some(schedule =>
+                        schedule.courseId === course.id &&
+                        schedule.startDate.toISOString().slice(0, 10) === dateKey &&
+                        (schedule.city === 'أونلاين' ? 'Online' : schedule.city) === city
+                    );
+                    if (exists) continue;
+
+                    const online = city === 'Online';
+                    created.push(await this.create({
+                        courseId: course.id,
+                        courseTitle: course.title,
+                        title: course.title,
+                        description: course.shortDescription ?? course.description,
+                        startDate: date,
+                        endDate: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 2),
+                        startTime: '09:00',
+                        endTime: online ? '12:00' : '14:00',
+                        city,
+                        location: undefined,
+                        onlineMeetingLink: undefined,
+                        maxParticipants: 20,
+                        currentParticipants: 0,
+                        waitlistMax: 10,
+                        currentWaitlist: 0,
+                        price: schedulePrice(city),
+                        currency: 'SAR',
+                        instructorName: course.trainer?.name,
+                        status: 'available',
+                        published: true,
+                        allowWaitlist: true,
+                        requireConfirmation: false,
+                        recurrence: 'once',
+                        sessions: [],
+                    }));
+                }
             }
-            created.push(await this.create({ courseId: c.id, courseTitle: c.title, title: c.title, description: c.shortDescription, startDate: new Date(d), endDate: new Date(d), startTime: '09:00', endTime: '12:00', onlineMeetingLink: 'يظهر للمتدرب بعد التسجيل', maxParticipants: 20, currentParticipants: 0, price: 3000, status: 'available', published: true, allowWaitlist: true, requireConfirmation: false, currency: 'SAR' }));
         }
-    } return created; }
+        return created;
+    }
 }
 export const scheduleRepository = new ScheduleRepository();
 

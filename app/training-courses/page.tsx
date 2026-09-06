@@ -6,7 +6,7 @@ import { scheduleRepository } from '@/lib/data/repositories/schedule-repository'
 import { categoryRepository } from '@/lib/data/repositories/category-repository';
 import type { Course } from '@/types/course';
 import type { Schedule } from '@/types/schedule';
-const cities = ['الرياض', 'جدة', 'الدمام', 'دبي', 'القاهرة', 'البحرين', 'قطر', 'لندن', 'برشلونة', 'ميلان'];
+const cities = ['الرياض', 'جدة', 'الدمام', 'دبي', 'القاهرة', 'البحرين', 'قطر', 'لندن', 'برشلونة', 'ميلان', 'Online'];
 const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2026, i, 1).toLocaleDateString('ar-SA', { month: 'long' }) }));
 export default function TrainingCourses() {
     const [programs, setPrograms] = useState<Course[]>([]);
@@ -16,7 +16,7 @@ export default function TrainingCourses() {
     const [category, setCategory] = useState('');
     const [city, setCity] = useState('');
     const [month, setMonth] = useState('');
-    useEffect(() => { Promise.all([courseRepository.findPublished({ filter: { type: 'training' } }), scheduleRepository.findUpcomingSchedules({ filter: { published: true } }), categoryRepository.findAll({ sort: 'name', order: 'asc' })]).then(([p, s, c]) => { setPrograms(p); setSchedules(s); setCategories(c); }); }, []);
+    useEffect(() => { Promise.all([courseRepository.findPublished({ filter: { type: 'training', trainingKind: 'public' } }), scheduleRepository.findUpcomingSchedules({ filter: { published: true } }), categoryRepository.findAll({ sort: 'name', order: 'asc' })]).then(([p, s, c]) => { setPrograms(p); setSchedules(s); setCategories(c); }); }, []);
     const visible = useMemo(() => programs.filter(p => {
         const q = search.trim().toLowerCase();
         const matchesSearch = !q || [p.title, p.description, p.shortDescription, p.audience].filter(Boolean).join(' ').toLowerCase().includes(q);
@@ -38,7 +38,7 @@ export default function TrainingCourses() {
   </div></section>
   <section className="section training-catalog-section"><div className="section-inner"><div className="catalog-category-pills"><button className={!category ? 'active' : ''} onClick={() => setCategory('')}>كل الدورات</button>{categories.slice(0, 7).map(c => <button key={c.id} className={category === c.id ? 'active' : ''} onClick={() => setCategory(c.id)}>{c.name}</button>)}</div>
    <div className="catalog-heading"><h1>أحدث الدورات المتاحة</h1><span>عرض {visible.length} من أصل {programs.length} دورة</span></div>
-   <div className="cards training-catalog-grid">{visible.map(p => { const ps = schedules.filter(s => s.courseId === p.id); return <article key={p.id} className="training-catalog-card"><div className="training-card-image"><span>{categories.find(c => c.id === p.categoryId)?.name || 'برنامج تدريبي'}</span><div>▣</div></div><div className="training-card-body"><h3>{p.title}</h3><p>{p.shortDescription || p.description}</p><div className="training-card-meta"><span>◷ {p.days || 0} أيام</span><span>📍 مواعيد متعددة</span><span>▣ {ps.length} موعد</span></div><div className="training-card-price"><small>يبدأ من</small><strong>3,000 ر.س</strong><Link href={`/training-program?id=${p.id}`}>التفاصيل ←</Link></div></div></article>; })}</div>
+   <div className="cards training-catalog-grid">{visible.map(p => { const ps = schedules.filter(s => s.courseId === p.id); return <article key={p.id} className="training-catalog-card"><div className="training-card-image"><span>{categories.find(c => c.id === p.categoryId)?.name || 'برنامج تدريبي'}</span><div>▣</div></div><div className="training-card-body"><h3>{p.title}</h3><p>{p.shortDescription || p.description}</p><div className="training-card-meta"><span>◷ {p.days || 0} أيام</span><span>📍 مواعيد متعددة</span><span>▣ {ps.length} موعد</span></div><div className="training-card-price"><small>تبدأ الأسعار من</small><strong>{Math.min(...ps.map(s => Number(s.price ?? 0)).filter(Boolean), 0).toLocaleString('ar-SA')} ر.س</strong><Link href={`/training-program?id=${p.id}`}>التفاصيل ←</Link></div></div></article>; })}</div>
    {!visible.length && <div className="catalog-empty">لا توجد دورات مطابقة لخيارات البحث الحالية.</div>}
   </div></section>
  </main>;

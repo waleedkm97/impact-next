@@ -91,7 +91,7 @@ function normalizeLegacyCourse(raw: any) {
         id: String(raw?.id ?? `course-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
         title: String(raw?.title ?? ''), slug: raw?.slug ?? slugifyLegacy(raw?.title ?? ''),
         description: raw?.description ?? raw?.fullDescription ?? '', shortDescription: raw?.shortDescription ?? '',
-        categoryId: raw?.categoryId ?? (categoryName ? slugifyLegacy(categoryName) : undefined), type: recorded ? 'recorded' : 'training', delivery,
+        categoryId: raw?.categoryId ?? (categoryName ? slugifyLegacy(categoryName) : undefined), type: recorded ? 'recorded' : 'training', delivery, trainingKind: raw?.trainingKind === 'corporate' ? 'corporate' : 'public',
         cities: Array.isArray(raw?.cities) ? raw.cities : [], price: Number(raw?.price ?? 0), oldPrice: raw?.oldPrice == null || raw?.oldPrice === '' ? undefined : Number(raw.oldPrice),
         discount: typeof raw?.discount === 'number' ? raw.discount : undefined, currency: 'SAR', days: Number(raw?.days ?? 0), hours, videosCount: Number(raw?.videosCount ?? lessons.filter((l: any) => l.type === 'video').length),
         objectives: Array.isArray(raw?.objectives) ? raw.objectives : String(raw?.objectives ?? '').split('\n').map((x: string) => x.trim()).filter(Boolean),

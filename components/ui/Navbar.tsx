@@ -1,6 +1,38 @@
-import Link from "next/link";
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
+
 export default function Navbar() {
-    return (<nav className="navbar">
+  const pathname = usePathname();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    traineeRepository
+      .getCurrentUser()
+      .then((currentUser) => {
+        if (active) {
+          setUser(currentUser);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
+
+  return (
+    <nav className="navbar">
       <div className="nav-container">
         <Link href="/" className="logo">
           Impact
@@ -15,11 +47,17 @@ export default function Navbar() {
         </div>
 
         <div className="nav-actions">
-          <Link href="/login" className="nav-login">
-            تسجيل الدخول
-          </Link>
+          {loading ? null : user ? (
+            <Link href="/account" className="nav-login">
+              حسابي
+            </Link>
+          ) : (
+            <Link href="/login" className="nav-login">
+              تسجيل الدخول
+            </Link>
+          )}
         </div>
       </div>
-    </nav>);
+    </nav>
+  );
 }
-

@@ -84,13 +84,14 @@ function buildSeedCourses(): Course[] {
             shortDescription: raw.shortDescription,
             categoryId,
             type: isRecorded ? 'recorded' : 'training',
-            delivery,
+trainingKind: raw.trainingKind === 'corporate' ? 'corporate' : 'public',
+delivery,
             cities: raw.cities ?? [],
             price: Number(raw.price ?? 0),
             oldPrice: raw.oldPrice == null ? undefined : Number(raw.oldPrice),
             discount: typeof raw.discount === 'number' ? raw.discount : undefined,
             currency: 'SAR',
-            days: Number(raw.days ?? 0),
+            days: isRecorded ? Number(raw.days ?? 0) : 3,
             hours: typeof raw.hours === 'number' ? raw.hours : Number(String(raw.hours ?? '').match(/\d+(?:\.\d+)?/)?.[0] ?? 0),
             videosCount: lessons.filter((l) => l.type === 'video').length,
             objectives: raw.objectives ?? [],
@@ -124,7 +125,7 @@ async function ensureHydrated() { if (hydrated)
     hydration = (async () => { const saved = await browserDbGet<Course[]>('courses'); if (saved !== null)
         courses = saved.map(normalizeCourse); hydrated = true; })().catch(() => { hydrated = true; });
 } await hydration; }
-function normalizeCourse(c: Course): Course { return { ...c, createdAt: date(c.createdAt), updatedAt: date(c.updatedAt), lessons: (c.lessons ?? []).map(l => ({ ...l, createdAt: date(l.createdAt), updatedAt: date(l.updatedAt), questions: l.questions?.map(q => ({ ...q })) })), schedules: (c.schedules ?? []).map(s => ({ ...s, startDate: date(s.startDate), endDate: date(s.endDate), createdAt: date(s.createdAt), updatedAt: date(s.updatedAt) })), assessments: (c.assessments ?? []).map(a => ({ ...a, createdAt: date(a.createdAt), updatedAt: date(a.updatedAt) })) }; }
+function normalizeCourse(c: Course): Course { return { ...c, days: c.type === 'training' ? 3 : c.days, createdAt: date(c.createdAt), updatedAt: date(c.updatedAt), lessons: (c.lessons ?? []).map(l => ({ ...l, createdAt: date(l.createdAt), updatedAt: date(l.updatedAt), questions: l.questions?.map(q => ({ ...q })) })), schedules: (c.schedules ?? []).map(s => ({ ...s, startDate: date(s.startDate), endDate: date(s.endDate), createdAt: date(s.createdAt), updatedAt: date(s.updatedAt) })), assessments: (c.assessments ?? []).map(a => ({ ...a, createdAt: date(a.createdAt), updatedAt: date(a.updatedAt) })) }; }
 async function persist() { await browserDbSet('courses', courses); }
 function cloneCourse(course: Course): Course {
     return {

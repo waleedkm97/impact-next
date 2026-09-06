@@ -1,82 +1,622 @@
-import type { Trainee, TraineeQuery, CourseEnrollment, CourseProgress, Certificate } from '@/types/trainee';
+import type {
+  Certificate,
+  CourseEnrollment,
+  CourseProgress,
+  Trainee,
+  TraineeQuery,
+} from '@/types/trainee';
 import { DEFAULT_TRAINEES } from '@/lib/data/seed-data';
-import { browserDbGet, browserDbSet } from '@/lib/data/browser-db';
-function parts(name: string) { const p = name.trim().split(/\s+/); return { firstName: p[0] ?? '', lastName: p.slice(1).join(' ') }; }
-function now() { return new Date(); }
-let trainees: Trainee[] = (DEFAULT_TRAINEES as any[]).map(t => { const n = parts(t.name ?? ''); return { id: t.id, profile: { firstName: n.firstName, lastName: n.lastName }, contact: { email: t.email, phone: t.phone }, email: t.email, passwordHash: t.password ?? 'password', enrollments: (t.enrolledCourses ?? []).map((id: string) => ({ courseId: id, courseTitle: id, enrolledAt: new Date(t.createdAt), status: 'active', progress: t.progress?.[id]?.progressPercent ?? 0 })), progress: [], certificates: [], status: 'active', emailVerified: true, createdAt: new Date(t.createdAt), updatedAt: new Date(t.createdAt) }; });
-let currentUserId: string | null = null;
+import { browserDbGet, browserDbSet, migrateLegacyData } from '@/lib/data/browser-db';
+
+function splitName(name: string) {
+  const parts = name.trim().split(/\s+/);
+
+  return {
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' '),
+  };
+}
+
+function now() {
+  return new Date();
+}
+
+function date(value: unknown, fallback = new Date()) {
+  const result = value instanceof Date ? value : new Date(String(value ?? ''));
+  return Number.isNaN(result.getTime()) ? fallback : result;
+}
+
+function getSessionIdFromCookie() {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const match = document.cookie
+    .split('; ')
+    .find((cookie) => cookie.startsWith('impact_trainee='));
+
+  if (!match) {
+    return null;
+  }
+
+  return decodeURIComponent(match.split('=').slice(1).join('=')) || null;
+}
+
+function setSession(id: string | null) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  if (id) {
+    document.cookie = `impact_trainee=${encodeURIComponent(id)}; Max-Age=2592000; Path=/; SameSite=Lax`;
+    return;
+  }
+
+  document.cookie = 'impact_trainee=; Max-Age=0; Path=/; SameSite=Lax';
+}
+
+function buildSeedTrainees(): Trainee[] {
+  return (DEFAULT_TRAINEES as any[]).map((trainee) => {
+    const name = splitName(trainee.name ?? '');
+    const createdAt = date(trainee.createdAt);
+
+    return {
+      id: trainee.id,
+      profile: {
+        firstName: name.firstName,
+        lastName: name.lastName,
+      },
+      contact: {
+        email: trainee.email,
+        phone: trainee.phone,
+      },
+      email: trainee.email,
+      passwordHash: trainee.password ?? 'password',
+      enrollments: (trainee.enrolledCourses ?? []).map((courseId: string) => ({
+        id: `enrollment-${trainee.id}-${courseId}`,
+        courseId,
+        courseTitle: courseId,
+        enrolledAt: createdAt,
+        status: 'active' as const,
+        progress: trainee.progress?.[courseId]?.progressPercent ?? 0,
+      })),
+      progress: [],
+      certificates: [],
+      status: 'active' as const,
+      emailVerified: true,
+      createdAt,
+      updatedAt: createdAt,
+    };
+  });
+}
+
+let trainees: Trainee[] = buildSeedTrainees();
 let hydrated = false;
 let hydration: Promise<void> | null = null;
-async function ensureHydrated() { if (hydrated)
-    return; if (!hydration) {
-    hydration = (async () => { const saved = await browserDbGet<Trainee[]>('trainees'); if (saved !== null)
-        trainees = saved.map(t => ({ ...t, createdAt: new Date(t.createdAt), updatedAt: new Date(t.updatedAt), lastLoginAt: t.lastLoginAt ? new Date(t.lastLoginAt) : undefined, enrollments: (t.enrollments ?? []).map(e => ({ ...e, enrolledAt: new Date(e.enrolledAt), completedAt: e.completedAt ? new Date(e.completedAt) : undefined, lastAccessedAt: e.lastAccessedAt ? new Date(e.lastAccessedAt) : undefined })), progress: t.progress ?? [], certificates: (t.certificates ?? []).map(c => ({ ...c, issuedAt: new Date(c.issuedAt) })) })); if (typeof document !== 'undefined') {
-        const m = document.cookie.match(/(?:^|; )impact_trainee=([^;]+)/);
-        if (m)
-            currentUserId = decodeURIComponent(m[1]);
-    } hydrated = true; })().catch(() => { hydrated = true; });
-} await hydration; }
-async function persist() { await browserDbSet('trainees', trainees); }
-function setSession(id: string | null) { currentUserId = id; if (typeof document !== 'undefined') {
-    if (id)
-        document.cookie = `impact_trainee=${encodeURIComponent(id)}; Max-Age=2592000; Path=/; SameSite=Lax`;
-    else
-        document.cookie = 'impact_trainee=; Max-Age=0; Path=/; SameSite=Lax';
-} }
-export class TraineeRepository {
-    async findById(id: string) { await ensureHydrated(); return trainees.find(t => t.id === id) ?? null; }
-    async findByEmail(email: string) { await ensureHydrated(); return trainees.find(t => t.email.toLowerCase() === email.trim().toLowerCase()) ?? null; }
-    async findAll(q?: TraineeQuery) { await ensureHydrated(); let r = trainees.filter(t => { const f = q?.filter; if (!f)
-        return true; if (f.status && t.status !== f.status)
-        return false; if (typeof f.emailVerified === 'boolean' && t.emailVerified !== f.emailVerified)
-        return false; if (f.enrolledInCourseId && !t.enrollments.some(e => e.courseId === f.enrolledInCourseId))
-        return false; if (f.searchQuery && !`${t.profile.firstName} ${t.profile.lastName} ${t.email} ${t.contact.phone ?? ''}`.toLowerCase().includes(f.searchQuery.toLowerCase()))
-        return false; return true; }); const o = q?.offset ?? 0; return typeof q?.limit === 'number' ? r.slice(o, o + q.limit) : r.slice(o); }
-    async create(input: any) { await ensureHydrated(); const t = { ...input, id: input.id ?? `trainee-${Date.now()}`, createdAt: now(), updatedAt: now(), enrollments: input.enrollments ?? [], progress: input.progress ?? [], certificates: input.certificates ?? [], status: input.status ?? 'active', emailVerified: input.emailVerified ?? false }; trainees.push(t); await persist(); return t; }
-    async update(id: string, input: any) { await ensureHydrated(); const i = trainees.findIndex(t => t.id === id); if (i < 0)
-        throw new Error('Trainee not found'); trainees[i] = { ...trainees[i], ...input, updatedAt: now() }; await persist(); return trainees[i]; }
-    async delete(id: string) { await ensureHydrated(); trainees = trainees.filter(t => t.id !== id); if (currentUserId === id)
-        setSession(null); await persist(); }
-    async verifyPassword(email: string, password: string) { await ensureHydrated(); const t = await this.findByEmail(email); return !!t && t.passwordHash === password; }
-    async updatePassword(id: string, password: string) { await ensureHydrated(); await this.update(id, { passwordHash: password }); }
-    async enrollInCourse(id: string, courseId: string, courseTitle: string) { await ensureHydrated(); const t = await this.findById(id); if (!t)
-        throw new Error('Trainee not found'); const e = { courseId, courseTitle, enrolledAt: now(), status: 'active' as const, progress: 0 }; t.enrollments.push(e); await persist(); return e; }
-    async updateEnrollment(id: string, eid: string, u: any) { await ensureHydrated(); const t = await this.findById(id); if (!t)
-        throw new Error('Trainee not found'); const i = t.enrollments.findIndex((e: any) => e.id === eid || e.courseId === eid); if (i < 0)
-        throw new Error('Enrollment not found'); t.enrollments[i] = { ...t.enrollments[i], ...u }; await persist(); return t.enrollments[i]; }
-    async getEnrollments(id: string) { await ensureHydrated(); return (await this.findById(id))?.enrollments ?? []; }
-    async getActiveEnrollments(id: string) { await ensureHydrated(); return (await this.getEnrollments(id)).filter(e => e.status === 'active'); }
-    async getCompletedEnrollments(id: string) { await ensureHydrated(); return (await this.getEnrollments(id)).filter(e => e.status === 'completed'); }
-    async updateProgress(id: string, p: CourseProgress) { await ensureHydrated(); const t = await this.findById(id); if (!t)
-        throw new Error('Trainee not found'); const i = t.progress.findIndex(x => x.courseId === p.courseId && x.lessonId === p.lessonId); if (i >= 0)
-        t.progress[i] = { ...t.progress[i], ...p };
-    else
-        t.progress.push(p); await persist(); }
-    async getProgress(id: string, courseId: string) { await ensureHydrated(); return (await this.findById(id))?.progress.filter(p => p.courseId === courseId) ?? []; }
-    async getCourseProgress(id: string, courseId: string, lessonId: string) { await ensureHydrated(); return (await this.getProgress(id, courseId)).find(p => p.lessonId === lessonId) ?? null; }
-    async issueCertificate(id: string, courseId: string, title: string) { await ensureHydrated(); const t = await this.findById(id); if (!t)
-        throw new Error('Trainee not found'); const c = { id: `cert-${Date.now()}`, courseId, courseTitle: title, issuedAt: now(), certificateNumber: `IMP-${Date.now()}`, verified: true }; t.certificates.push(c); await persist(); return c; }
-    async getCertificates(id: string) { await ensureHydrated(); return (await this.findById(id))?.certificates ?? []; }
-    async verifyCertificate(n: string) { await ensureHydrated(); for (const t of trainees) {
-        const c = t.certificates.find(x => x.certificateNumber === n);
-        if (c)
-            return c;
-    } return null; }
-    async search(q: string, limit = 20) { await ensureHydrated(); return this.findAll({ filter: { searchQuery: q }, limit }); }
-    async findByStatus(status: any, q?: TraineeQuery) { await ensureHydrated(); return this.findAll({ ...q, filter: { ...q?.filter, status } }); }
-    async getCount(q?: TraineeQuery) { await ensureHydrated(); return (await this.findAll(q)).length; }
-    async getActiveTraineesCount() { await ensureHydrated(); return trainees.filter(t => t.status === 'active').length; }
-    async loginUser(email: string, password: string) { await ensureHydrated(); if (await this.verifyPassword(email, password)) {
-        const user = await this.findByEmail(email);
-        if (user) {
-            user.lastLoginAt = now();
-            setSession(user.id);
-            await persist();
-            return user;
-        }
-    } return null; }
-    async getCurrentUser() { await ensureHydrated(); return currentUserId ? this.findById(currentUserId) : null; }
-    async logout() { await ensureHydrated(); setSession(null); }
-}
-export const traineeRepository = new TraineeRepository();
 
+async function ensureHydrated() {
+  if (hydrated) {
+    return;
+  }
+
+  if (!hydration) {
+    hydration = (async () => {
+      await migrateLegacyData();
+
+      const saved = await browserDbGet<Trainee[]>('trainees');
+
+      if (saved !== null) {
+        trainees = saved.map(normalizeTrainee);
+      }
+
+      hydrated = true;
+    })().catch(() => {
+      hydrated = true;
+    });
+  }
+
+  await hydration;
+}
+
+function normalizeTrainee(trainee: Trainee): Trainee {
+  return {
+    ...trainee,
+    profile: {
+      ...trainee.profile,
+    },
+    contact: {
+      ...trainee.contact,
+    },
+    company: trainee.company ? { ...trainee.company } : undefined,
+    enrollments: (trainee.enrollments ?? []).map((enrollment) => ({
+      ...enrollment,
+      enrolledAt: date(enrollment.enrolledAt),
+      completedAt: enrollment.completedAt
+        ? date(enrollment.completedAt)
+        : undefined,
+      lastAccessedAt: enrollment.lastAccessedAt
+        ? date(enrollment.lastAccessedAt)
+        : undefined,
+    })),
+    progress: (trainee.progress ?? []).map((progress) => ({
+      ...progress,
+      completedAt: progress.completedAt ? date(progress.completedAt) : undefined,
+    })),
+    certificates: (trainee.certificates ?? []).map((certificate) => ({
+      ...certificate,
+      issuedAt: date(certificate.issuedAt),
+    })),
+    createdAt: date(trainee.createdAt),
+    updatedAt: date(trainee.updatedAt),
+    lastLoginAt: trainee.lastLoginAt ? date(trainee.lastLoginAt) : undefined,
+  };
+}
+
+function cloneTrainee(trainee: Trainee): Trainee {
+  return normalizeTrainee(trainee);
+}
+
+async function persist() {
+  await browserDbSet('trainees', trainees);
+}
+
+export class TraineeRepository {
+  async refresh() {
+    hydrated = false;
+    hydration = null;
+    await ensureHydrated();
+  }
+
+  async findById(id: string) {
+    await ensureHydrated();
+    const trainee = trainees.find((item) => item.id === id);
+    return trainee ? cloneTrainee(trainee) : null;
+  }
+
+  async findByEmail(email: string) {
+    await ensureHydrated();
+    const normalizedEmail = email.trim().toLowerCase();
+    const trainee = trainees.find(
+      (item) => item.email.toLowerCase() === normalizedEmail,
+    );
+
+    return trainee ? cloneTrainee(trainee) : null;
+  }
+
+  async findAll(query?: TraineeQuery) {
+    await ensureHydrated();
+
+    let result = trainees.filter((trainee) => {
+      const filter = query?.filter;
+
+      if (!filter) {
+        return true;
+      }
+
+      if (filter.status && trainee.status !== filter.status) {
+        return false;
+      }
+
+      if (
+        typeof filter.emailVerified === 'boolean' &&
+        trainee.emailVerified !== filter.emailVerified
+      ) {
+        return false;
+      }
+
+      if (
+        filter.enrolledInCourseId &&
+        !trainee.enrollments.some(
+          (enrollment) => enrollment.courseId === filter.enrolledInCourseId,
+        )
+      ) {
+        return false;
+      }
+
+      if (filter.searchQuery) {
+        const text = [
+          trainee.profile.firstName,
+          trainee.profile.lastName,
+          trainee.profile.firstNameEnglish,
+          trainee.profile.lastNameEnglish,
+          trainee.email,
+          trainee.contact.phone,
+          trainee.company?.companyName,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        if (!text.includes(filter.searchQuery.trim().toLowerCase())) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    const order = query?.order ?? 'desc';
+
+    result.sort((a, b) => {
+      let value = a.createdAt.getTime() - b.createdAt.getTime();
+
+      if (query?.sort === 'name') {
+        value = `${a.profile.firstName} ${a.profile.lastName}`.localeCompare(
+          `${b.profile.firstName} ${b.profile.lastName}`,
+          'ar',
+        );
+      }
+
+      if (query?.sort === 'lastLoginAt') {
+        value =
+          (a.lastLoginAt?.getTime() ?? 0) - (b.lastLoginAt?.getTime() ?? 0);
+      }
+
+      return order === 'asc' ? value : -value;
+    });
+
+    const offset = query?.offset ?? 0;
+    const end = typeof query?.limit === 'number' ? offset + query.limit : undefined;
+
+    return result.slice(offset, end).map(cloneTrainee);
+  }
+
+  async create(input: Omit<Trainee, 'id' | 'createdAt' | 'updatedAt'>) {
+    await ensureHydrated();
+
+    const timestamp = now();
+    const trainee: Trainee = {
+      ...input,
+      id: `trainee-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      enrollments: input.enrollments ?? [],
+      progress: input.progress ?? [],
+      certificates: input.certificates ?? [],
+    };
+
+    trainees.push(trainee);
+    await persist();
+
+    return cloneTrainee(trainee);
+  }
+
+  async update(id: string, input: Partial<Trainee>) {
+    await ensureHydrated();
+
+    const index = trainees.findIndex((trainee) => trainee.id === id);
+
+    if (index < 0) {
+      throw new Error('Trainee not found');
+    }
+
+    trainees[index] = {
+      ...trainees[index],
+      ...input,
+      updatedAt: now(),
+    };
+
+    await persist();
+    return cloneTrainee(trainees[index]);
+  }
+
+  async delete(id: string) {
+    await ensureHydrated();
+    trainees = trainees.filter((trainee) => trainee.id !== id);
+    setSession(null);
+    await persist();
+  }
+
+  async verifyPassword(email: string, password: string) {
+    const trainee = await this.findByEmail(email);
+    return !!trainee && trainee.passwordHash === password;
+  }
+
+  async updatePassword(id: string, password: string) {
+    await this.update(id, { passwordHash: password });
+  }
+
+  async enrollInCourse(
+    id: string,
+    courseId: string,
+    courseTitle: string,
+    options?: {
+      scheduleId?: string;
+      groupId?: string;
+    },
+  ) {
+    await ensureHydrated();
+
+    const trainee = trainees.find((item) => item.id === id);
+
+    if (!trainee) {
+      throw new Error('Trainee not found');
+    }
+
+    const existing = trainee.enrollments.find(
+      (enrollment) =>
+        enrollment.courseId === courseId &&
+        (!options?.scheduleId || enrollment.scheduleId === options.scheduleId),
+    );
+
+    if (existing) {
+      return existing;
+    }
+
+    const enrollment: CourseEnrollment = {
+      id: `enrollment-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      courseId,
+      courseTitle,
+      enrolledAt: now(),
+      scheduleId: options?.scheduleId,
+      groupId: options?.groupId,
+      status: 'active',
+      progress: 0,
+      preAssessment: 'available',
+      postAssessment: 'locked',
+      courseEvaluation: 'available',
+      attendance: 'not-marked',
+      attendanceMode: options?.scheduleId ? 'in-person' : 'online',
+    };
+
+    trainee.enrollments.push(enrollment);
+    trainee.updatedAt = now();
+    await persist();
+
+    return enrollment;
+  }
+
+  async updateEnrollment(
+    id: string,
+    enrollmentId: string,
+    input: Partial<CourseEnrollment>,
+  ) {
+    await ensureHydrated();
+
+    const trainee = trainees.find((item) => item.id === id);
+
+    if (!trainee) {
+      throw new Error('Trainee not found');
+    }
+
+    const index = trainee.enrollments.findIndex(
+      (enrollment) =>
+        enrollment.id === enrollmentId || enrollment.courseId === enrollmentId,
+    );
+
+    if (index < 0) {
+      throw new Error('Enrollment not found');
+    }
+
+    trainee.enrollments[index] = {
+      ...trainee.enrollments[index],
+      ...input,
+    };
+    trainee.updatedAt = now();
+
+    await persist();
+    return trainee.enrollments[index];
+  }
+
+  async getEnrollments(id: string) {
+    const trainee = await this.findById(id);
+    return trainee?.enrollments ?? [];
+  }
+
+  async getActiveEnrollments(id: string) {
+    const enrollments = await this.getEnrollments(id);
+    return enrollments.filter((enrollment) => enrollment.status === 'active');
+  }
+
+  async getCompletedEnrollments(id: string) {
+    const enrollments = await this.getEnrollments(id);
+    return enrollments.filter(
+      (enrollment) => enrollment.status === 'completed',
+    );
+  }
+
+  async updateProgress(id: string, progress: CourseProgress, totalLessons?: number) {
+    await ensureHydrated();
+
+    const trainee = trainees.find((item) => item.id === id);
+
+    if (!trainee) {
+      throw new Error('Trainee not found');
+    }
+
+    const index = trainee.progress.findIndex(
+      (item) =>
+        item.courseId === progress.courseId &&
+        item.lessonId === progress.lessonId,
+    );
+
+    if (index >= 0) {
+      trainee.progress[index] = {
+        ...trainee.progress[index],
+        ...progress,
+      };
+    } else {
+      trainee.progress.push(progress);
+    }
+
+    const enrollment = trainee.enrollments.find((item) => item.courseId === progress.courseId);
+    if (enrollment) {
+      const courseProgress = trainee.progress.filter((item) => item.courseId === progress.courseId);
+      const completedCount = courseProgress.filter((item) => item.completed).length;
+      const lessonTotal = Math.max(totalLessons ?? courseProgress.length, 1);
+      enrollment.progress = Math.max(enrollment.progress, Math.min(100, Math.round((completedCount / lessonTotal) * 100)));
+      enrollment.lastAccessedAt = now();
+    }
+    trainee.updatedAt = now();
+    await persist();
+  }
+
+  async completeEnrollment(id: string, enrollmentId: string) {
+    await ensureHydrated();
+    const trainee = trainees.find((item) => item.id === id);
+    if (!trainee) throw new Error('Trainee not found');
+    const enrollment = trainee.enrollments.find((item) => item.id === enrollmentId || item.courseId === enrollmentId);
+    if (!enrollment) throw new Error('Enrollment not found');
+    enrollment.progress = 100;
+    enrollment.status = 'completed';
+    enrollment.completedAt = now();
+    enrollment.postAssessment = 'available';
+    const existingCertificate = trainee.certificates.find(c => c.courseId === enrollment.courseId);
+    if (!existingCertificate) {
+      const certificate: Certificate = { id: `cert-${Date.now()}`, courseId: enrollment.courseId, courseTitle: enrollment.courseTitle, issuedAt: now(), certificateNumber: `IMP-${Date.now()}`, templateId: 'certificate-template.png', verified: true };
+      trainee.certificates.push(certificate);
+      enrollment.certificateId = certificate.id;
+    } else {
+      enrollment.certificateId = existingCertificate.id;
+    }
+    trainee.updatedAt = now();
+    await persist();
+    return enrollment;
+  }
+
+  async updateEnrollmentAssessment(id: string, enrollmentId: string, type: 'preAssessment' | 'postAssessment' | 'courseEvaluation', state: 'locked' | 'available' | 'completed') {
+    await ensureHydrated();
+    const trainee = trainees.find(item => item.id === id);
+    if (!trainee) throw new Error('Trainee not found');
+    const enrollment = trainee.enrollments.find(item => item.id === enrollmentId || item.courseId === enrollmentId);
+    if (!enrollment) throw new Error('Enrollment not found');
+    enrollment[type] = state;
+    trainee.updatedAt = now();
+    await persist();
+    return enrollment;
+  }
+
+  async updateAttendance(id: string, enrollmentId: string, status: 'not-marked' | 'present' | 'absent') {
+    await ensureHydrated();
+    const trainee = trainees.find(item => item.id === id);
+    if (!trainee) throw new Error('Trainee not found');
+    const enrollment = trainee.enrollments.find(item => item.id === enrollmentId || item.courseId === enrollmentId);
+    if (!enrollment) throw new Error('Enrollment not found');
+    enrollment.attendance = status;
+    trainee.updatedAt = now();
+    await persist();
+    return enrollment;
+  }
+
+  async getProgress(id: string, courseId: string) {
+    const trainee = await this.findById(id);
+    return trainee?.progress.filter((item) => item.courseId === courseId) ?? [];
+  }
+
+  async getCourseProgress(id: string, courseId: string, lessonId: string) {
+    const progress = await this.getProgress(id, courseId);
+    return progress.find((item) => item.lessonId === lessonId) ?? null;
+  }
+
+  async issueCertificate(id: string, courseId: string, courseTitle: string) {
+    await ensureHydrated();
+
+    const trainee = trainees.find((item) => item.id === id);
+
+    if (!trainee) {
+      throw new Error('Trainee not found');
+    }
+
+    const certificate: Certificate = {
+      id: `cert-${Date.now()}`,
+      courseId,
+      courseTitle,
+      issuedAt: now(),
+      certificateNumber: `IMP-${Date.now()}`,
+      templateId: 'certificate-template.png',
+      verified: true,
+    };
+
+    trainee.certificates.push(certificate);
+    trainee.updatedAt = now();
+    await persist();
+
+    return certificate;
+  }
+
+  async getCertificates(id: string) {
+    const trainee = await this.findById(id);
+    return trainee?.certificates ?? [];
+  }
+
+  async verifyCertificate(number: string) {
+    await ensureHydrated();
+
+    for (const trainee of trainees) {
+      const certificate = trainee.certificates.find(
+        (item) => item.certificateNumber === number,
+      );
+
+      if (certificate) {
+        return certificate;
+      }
+    }
+
+    return null;
+  }
+
+  async search(query: string, limit = 20) {
+    return this.findAll({
+      filter: { searchQuery: query },
+      limit,
+    });
+  }
+
+  async findByStatus(status: Trainee['status'], query?: TraineeQuery) {
+    return this.findAll({
+      ...query,
+      filter: {
+        ...query?.filter,
+        status,
+      },
+    });
+  }
+
+  async getCount(query?: TraineeQuery) {
+    return (await this.findAll(query)).length;
+  }
+
+  async getActiveTraineesCount() {
+    await ensureHydrated();
+    return trainees.filter((trainee) => trainee.status === 'active').length;
+  }
+
+  async loginUser(email: string, password: string) {
+    await ensureHydrated();
+
+    const trainee = trainees.find(
+      (item) =>
+        item.email.toLowerCase() === email.trim().toLowerCase() &&
+        item.passwordHash === password,
+    );
+
+    if (!trainee) {
+      return null;
+    }
+
+    trainee.lastLoginAt = now();
+    trainee.updatedAt = now();
+    setSession(trainee.id);
+    await persist();
+
+    return cloneTrainee(trainee);
+  }
+
+  async getCurrentUser() {
+    await ensureHydrated();
+
+    const sessionId = getSessionIdFromCookie();
+
+    if (!sessionId) {
+      return null;
+    }
+
+    return this.findById(sessionId);
+  }
+
+  async logout() {
+    setSession(null);
+  }
+}
+
+export const traineeRepository = new TraineeRepository();
