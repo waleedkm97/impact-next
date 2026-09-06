@@ -1,8 +1,6 @@
 import Link from "next/link";
-
 export default function Footer() {
-  return (
-    <footer className="footer">
+    return (<footer className="footer">
       <div className="footer-inner">
         <div className="footer-brand">
           <h3>Impact Training</h3>
@@ -26,6 +24,6 @@ export default function Footer() {
       <div className="footer-bottom">
         © Impact Training
       </div>
-    </footer>
-  );
+    </footer>);
 }
+

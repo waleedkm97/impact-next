@@ -1,8 +1,6 @@
 import Link from "next/link";
-
 export default function HomePage() {
-  return (
-    <main>
+    return (<main>
       <section className="hero">
         <div className="hero-inner">
           <div className="hero-copy">
@@ -27,7 +25,7 @@ export default function HomePage() {
 
           <div className="hero-panel">
             <div className="hero-card">
-              <div className="about-image" />
+              <div className="about-image"/>
               <p>برامج عملية مصممة لتحقيق نتائج ملموسة في بيئة العمل.</p>
             </div>
           </div>
@@ -45,11 +43,10 @@ export default function HomePage() {
 
           <div className="cards">
             {[
-              "مهارات البيع وتحويل الفرص لنتائج ملموسة",
-              "إدارة الوقت ورفع الإنتاجية",
-              "تطوير المهارات المهنية",
-            ].map((course) => (
-              <article key={course} className="card">
+            "مهارات البيع وتحويل الفرص لنتائج ملموسة",
+            "إدارة الوقت ورفع الإنتاجية",
+            "تطوير المهارات المهنية",
+        ].map((course) => (<article key={course} className="card">
                 <span className="card-label">دورة مسجلة</span>
                 <h3>{course}</h3>
                 <p>
@@ -59,8 +56,7 @@ export default function HomePage() {
                 <Link href="/course-details" className="btn-secondary">
                   عرض الدورة
                 </Link>
-              </article>
-            ))}
+              </article>))}
           </div>
         </div>
       </section>
@@ -69,15 +65,13 @@ export default function HomePage() {
         <div className="section-inner">
           <div className="cards">
             {[
-              "تعلّم بطرق تعكس احتياجاتك المهنية",
-              "برامج تدريبية مباشرة بقيادة مختصين",
-              "خدمات مهنية للمؤسسات والفرق",
-              "حلول تدريبية واستشارية متكاملة",
-            ].map((item) => (
-              <article key={item} className="card">
+            "تعلّم بطرق تعكس احتياجاتك المهنية",
+            "برامج تدريبية مباشرة بقيادة مختصين",
+            "خدمات مهنية للمؤسسات والفرق",
+            "حلول تدريبية واستشارية متكاملة",
+        ].map((item) => (<article key={item} className="card">
                 <h3>{item}</h3>
-              </article>
-            ))}
+              </article>))}
           </div>
         </div>
       </section>
@@ -95,6 +89,6 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-    </main>
-  );
+    </main>);
 }
+

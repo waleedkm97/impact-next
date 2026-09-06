@@ -1,8 +1,6 @@
 import Link from "next/link";
-
 export default function Navbar() {
-  return (
-    <nav className="navbar">
+    return (<nav className="navbar">
       <div className="nav-container">
         <Link href="/" className="logo">
           Impact
@@ -22,6 +20,6 @@ export default function Navbar() {
           </Link>
         </div>
       </div>
-    </nav>
-  );
+    </nav>);
 }
+

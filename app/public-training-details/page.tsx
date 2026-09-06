@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
 export default function PublicTrainingDetailsPage() {
-  return (
-    <main dir="rtl" className="container mx-auto px-6 py-12">
+    return (<main dir="rtl" className="container mx-auto px-6 py-12">
       <section className="mb-10">
         <h1 className="text-4xl font-bold">
           عنوان البرنامج
@@ -14,11 +12,7 @@ export default function PublicTrainingDetailsPage() {
           تفاصيل البرنامج التدريبي العام.
         </p>
 
-        <Button
-          className="mt-6"
-          nativeButton={false}
-          render={<Link href="/training-booking" />}
-        >
+        <Button className="mt-6" nativeButton={false} render={<Link href="/training-booking"/>}>
           التسجيل في البرنامج
         </Button>
       </section>
@@ -54,6 +48,6 @@ export default function PublicTrainingDetailsPage() {
           </CardContent>
         </Card>
       </div>
-    </main>
-  );
+    </main>);
 }
+

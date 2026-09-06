@@ -1,3 +1,9 @@
 'use client';
-import Link from 'next/link';import {useSearchParams} from 'next/navigation';import {useEffect,useState} from 'react';import {serviceRepository} from '@/lib/data/repositories/service-repository';import type {Service} from '@/types/service';
-export default function ServiceDetails(){const params=useSearchParams();const[id]=useState(params.get('id')||'');const[s,setS]=useState<Service|null>(null);useEffect(()=>{serviceRepository.findById(id).then(setS)},[id]);if(!s)return <main dir="rtl" className="container mx-auto px-6 py-12">جاري التحميل...</main>;return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>{s.title}</h1><p>{s.description}</p><h2>الأهداف</h2><ul>{s.objectives.map(x=><li key={x}>{x}</li>)}</ul><h2>المخرجات</h2><ul>{s.deliverables.map(x=><li key={x.id}>{x.title}</li>)}</ul><p>{s.target.audience}</p><Link href="/services" className="btn-primary">العودة للخدمات</Link></main>}
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { serviceRepository } from '@/lib/data/repositories/service-repository';
+import type { Service } from '@/types/service';
+export default function ServiceDetails() { const params = useSearchParams(); const [id] = useState(params.get('id') || ''); const [s, setS] = useState<Service | null>(null); useEffect(() => { serviceRepository.findById(id).then(setS); }, [id]); if (!s)
+    return <main dir="rtl" className="container mx-auto px-6 py-12">جاري التحميل...</main>; return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>{s.title}</h1><p>{s.description}</p><h2>الأهداف</h2><ul>{s.objectives.map(x => <li key={x}>{x}</li>)}</ul><h2>المخرجات</h2><ul>{s.deliverables.map(x => <li key={x.id}>{x.title}</li>)}</ul><p>{s.target.audience}</p><Link href="/services" className="btn-primary">العودة للخدمات</Link></main>; }
+

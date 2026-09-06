@@ -1,12 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-
 export default function CertificatePage() {
-  return (
-    <main
-      dir="rtl"
-      className="container mx-auto flex min-h-[80vh] items-center justify-center px-6 py-12"
-    >
+    return (<main dir="rtl" className="container mx-auto flex min-h-[80vh] items-center justify-center px-6 py-12">
       <Card className="w-full max-w-4xl">
         <CardContent className="p-10">
           <div className="border-8 border-double p-12 text-center">
@@ -45,6 +40,6 @@ export default function CertificatePage() {
           </Button>
         </CardContent>
       </Card>
-    </main>
-  );
+    </main>);
 }
+

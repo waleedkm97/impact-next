@@ -1,1 +1,6 @@
-'use client';import{useEffect,useState}from'react';import{traineeRepository}from'@/lib/data/repositories/trainee-repository';export default function Account(){const[u,setU]=useState<any>(null);useEffect(()=>{traineeRepository.getCurrentUser().then(setU)},[]);if(!u)return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>حساب المتدرب</h1><p>لم يتم تسجيل الدخول.</p></main>;return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>مرحباً {u.profile.firstName} {u.profile.lastName}</h1><p>{u.email}</p><h2>دوراتي</h2>{u.enrollments.map((e:any)=><div key={e.courseId}>{e.courseTitle} · {e.progress}%</div>)}<button onClick={()=>void traineeRepository.logout().then(()=>location.reload())}>تسجيل الخروج</button></main>}
+'use client';
+import { useEffect, useState } from 'react';
+import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
+export default function Account() { const [u, setU] = useState<any>(null); useEffect(() => { traineeRepository.getCurrentUser().then(setU); }, []); if (!u)
+    return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>حساب المتدرب</h1><p>لم يتم تسجيل الدخول.</p></main>; return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>مرحباً {u.profile.firstName} {u.profile.lastName}</h1><p>{u.email}</p><h2>دوراتي</h2>{u.enrollments.map((e: any) => <div key={e.courseId}>{e.courseTitle} · {e.progress}%</div>)}<button onClick={() => void traineeRepository.logout().then(() => location.reload())}>تسجيل الخروج</button></main>; }
+

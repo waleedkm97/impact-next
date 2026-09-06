@@ -1,14 +1,82 @@
 import type { Trainee, TraineeQuery, CourseEnrollment, CourseProgress, Certificate } from '@/types/trainee';
 import { DEFAULT_TRAINEES } from '@/lib/data/seed-data';
 import { browserDbGet, browserDbSet } from '@/lib/data/browser-db';
-function parts(name:string){const p=name.trim().split(/\s+/);return {firstName:p[0]??'',lastName:p.slice(1).join(' ')}}
-function now(){return new Date()}
-let trainees:Trainee[]=(DEFAULT_TRAINEES as any[]).map(t=>{const n=parts(t.name??'');return {id:t.id,profile:{firstName:n.firstName,lastName:n.lastName},contact:{email:t.email,phone:t.phone},email:t.email,passwordHash:t.password??'password',enrollments:(t.enrolledCourses??[]).map((id:string)=>({courseId:id,courseTitle:id,enrolledAt:new Date(t.createdAt),status:'active',progress:t.progress?.[id]?.progressPercent??0})),progress:[],certificates:[],status:'active',emailVerified:true,createdAt:new Date(t.createdAt),updatedAt:new Date(t.createdAt)}});
-let currentUserId:string|null=null;
-let hydrated=false; let hydration:Promise<void>|null=null;
-async function ensureHydrated(){if(hydrated)return;if(!hydration){hydration=(async()=>{const saved=await browserDbGet<Trainee[]>('trainees');if(saved !== null)trainees=saved.map(t=>({...t,createdAt:new Date(t.createdAt),updatedAt:new Date(t.updatedAt),lastLoginAt:t.lastLoginAt?new Date(t.lastLoginAt):undefined,enrollments:(t.enrollments??[]).map(e=>({...e,enrolledAt:new Date(e.enrolledAt),completedAt:e.completedAt?new Date(e.completedAt):undefined,lastAccessedAt:e.lastAccessedAt?new Date(e.lastAccessedAt):undefined})),progress:t.progress??[],certificates:(t.certificates??[]).map(c=>({...c,issuedAt:new Date(c.issuedAt)}))}));if(typeof document!=='undefined'){const m=document.cookie.match(/(?:^|; )impact_trainee=([^;]+)/);if(m)currentUserId=decodeURIComponent(m[1]);}hydrated=true;})().catch(()=>{hydrated=true;});}await hydration;}
-async function persist(){await browserDbSet('trainees',trainees);}
-function setSession(id:string|null){currentUserId=id;if(typeof document!=='undefined'){if(id)document.cookie=`impact_trainee=${encodeURIComponent(id)}; Max-Age=2592000; Path=/; SameSite=Lax`;else document.cookie='impact_trainee=; Max-Age=0; Path=/; SameSite=Lax';}}
-export class TraineeRepository{
- async findById(id:string){await ensureHydrated();return trainees.find(t=>t.id===id)??null}async findByEmail(email:string){await ensureHydrated();return trainees.find(t=>t.email.toLowerCase()===email.trim().toLowerCase())??null}async findAll(q?:TraineeQuery){await ensureHydrated();let r=trainees.filter(t=>{const f=q?.filter;if(!f)return true;if(f.status&&t.status!==f.status)return false;if(typeof f.emailVerified==='boolean'&&t.emailVerified!==f.emailVerified)return false;if(f.enrolledInCourseId&&!t.enrollments.some(e=>e.courseId===f.enrolledInCourseId))return false;if(f.searchQuery&&!`${t.profile.firstName} ${t.profile.lastName} ${t.email} ${t.contact.phone??''}`.toLowerCase().includes(f.searchQuery.toLowerCase()))return false;return true});const o=q?.offset??0;return typeof q?.limit==='number'?r.slice(o,o+q.limit):r.slice(o)}async create(input:any){await ensureHydrated();const t={...input,id:input.id??`trainee-${Date.now()}`,createdAt:now(),updatedAt:now(),enrollments:input.enrollments??[],progress:input.progress??[],certificates:input.certificates??[],status:input.status??'active',emailVerified:input.emailVerified??false};trainees.push(t);await persist();return t}async update(id:string,input:any){await ensureHydrated();const i=trainees.findIndex(t=>t.id===id);if(i<0)throw new Error('Trainee not found');trainees[i]={...trainees[i],...input,updatedAt:now()};await persist();return trainees[i]}async delete(id:string){await ensureHydrated();trainees=trainees.filter(t=>t.id!==id);if(currentUserId===id)setSession(null);await persist();}async verifyPassword(email:string,password:string){await ensureHydrated();const t=await this.findByEmail(email);return !!t&&t.passwordHash===password}async updatePassword(id:string,password:string){await ensureHydrated();await this.update(id,{passwordHash:password})}async enrollInCourse(id:string,courseId:string,courseTitle:string){await ensureHydrated();const t=await this.findById(id);if(!t)throw new Error('Trainee not found');const e={courseId,courseTitle,enrolledAt:now(),status:'active' as const,progress:0};t.enrollments.push(e);await persist();return e}async updateEnrollment(id:string,eid:string,u:any){await ensureHydrated();const t=await this.findById(id);if(!t)throw new Error('Trainee not found');const i=t.enrollments.findIndex((e:any)=>e.id===eid||e.courseId===eid);if(i<0)throw new Error('Enrollment not found');t.enrollments[i]={...t.enrollments[i],...u};await persist();return t.enrollments[i]}async getEnrollments(id:string){await ensureHydrated();return (await this.findById(id))?.enrollments??[]}async getActiveEnrollments(id:string){await ensureHydrated();return (await this.getEnrollments(id)).filter(e=>e.status==='active')}async getCompletedEnrollments(id:string){await ensureHydrated();return (await this.getEnrollments(id)).filter(e=>e.status==='completed')}async updateProgress(id:string,p:CourseProgress){await ensureHydrated();const t=await this.findById(id);if(!t)throw new Error('Trainee not found');const i=t.progress.findIndex(x=>x.courseId===p.courseId&&x.lessonId===p.lessonId);if(i>=0)t.progress[i]={...t.progress[i],...p};else t.progress.push(p);await persist()}async getProgress(id:string,courseId:string){await ensureHydrated();return (await this.findById(id))?.progress.filter(p=>p.courseId===courseId)??[]}async getCourseProgress(id:string,courseId:string,lessonId:string){await ensureHydrated();return (await this.getProgress(id,courseId)).find(p=>p.lessonId===lessonId)??null}async issueCertificate(id:string,courseId:string,title:string){await ensureHydrated();const t=await this.findById(id);if(!t)throw new Error('Trainee not found');const c={id:`cert-${Date.now()}`,courseId,courseTitle:title,issuedAt:now(),certificateNumber:`IMP-${Date.now()}`,verified:true};t.certificates.push(c);await persist();return c}async getCertificates(id:string){await ensureHydrated();return (await this.findById(id))?.certificates??[]}async verifyCertificate(n:string){await ensureHydrated();for(const t of trainees){const c=t.certificates.find(x=>x.certificateNumber===n);if(c)return c}return null}async search(q:string,limit=20){await ensureHydrated();return this.findAll({filter:{searchQuery:q},limit})}async findByStatus(status:any,q?:TraineeQuery){await ensureHydrated();return this.findAll({...q,filter:{...q?.filter,status}})}async getCount(q?:TraineeQuery){await ensureHydrated();return (await this.findAll(q)).length}async getActiveTraineesCount(){await ensureHydrated();return trainees.filter(t=>t.status==='active').length}async loginUser(email:string,password:string){await ensureHydrated();if(await this.verifyPassword(email,password)){const user=await this.findByEmail(email);if(user){user.lastLoginAt=now();setSession(user.id);await persist();return user;}}return null}async getCurrentUser(){await ensureHydrated();return currentUserId?this.findById(currentUserId):null}async logout(){await ensureHydrated();setSession(null)}}
-export const traineeRepository=new TraineeRepository();
+function parts(name: string) { const p = name.trim().split(/\s+/); return { firstName: p[0] ?? '', lastName: p.slice(1).join(' ') }; }
+function now() { return new Date(); }
+let trainees: Trainee[] = (DEFAULT_TRAINEES as any[]).map(t => { const n = parts(t.name ?? ''); return { id: t.id, profile: { firstName: n.firstName, lastName: n.lastName }, contact: { email: t.email, phone: t.phone }, email: t.email, passwordHash: t.password ?? 'password', enrollments: (t.enrolledCourses ?? []).map((id: string) => ({ courseId: id, courseTitle: id, enrolledAt: new Date(t.createdAt), status: 'active', progress: t.progress?.[id]?.progressPercent ?? 0 })), progress: [], certificates: [], status: 'active', emailVerified: true, createdAt: new Date(t.createdAt), updatedAt: new Date(t.createdAt) }; });
+let currentUserId: string | null = null;
+let hydrated = false;
+let hydration: Promise<void> | null = null;
+async function ensureHydrated() { if (hydrated)
+    return; if (!hydration) {
+    hydration = (async () => { const saved = await browserDbGet<Trainee[]>('trainees'); if (saved !== null)
+        trainees = saved.map(t => ({ ...t, createdAt: new Date(t.createdAt), updatedAt: new Date(t.updatedAt), lastLoginAt: t.lastLoginAt ? new Date(t.lastLoginAt) : undefined, enrollments: (t.enrollments ?? []).map(e => ({ ...e, enrolledAt: new Date(e.enrolledAt), completedAt: e.completedAt ? new Date(e.completedAt) : undefined, lastAccessedAt: e.lastAccessedAt ? new Date(e.lastAccessedAt) : undefined })), progress: t.progress ?? [], certificates: (t.certificates ?? []).map(c => ({ ...c, issuedAt: new Date(c.issuedAt) })) })); if (typeof document !== 'undefined') {
+        const m = document.cookie.match(/(?:^|; )impact_trainee=([^;]+)/);
+        if (m)
+            currentUserId = decodeURIComponent(m[1]);
+    } hydrated = true; })().catch(() => { hydrated = true; });
+} await hydration; }
+async function persist() { await browserDbSet('trainees', trainees); }
+function setSession(id: string | null) { currentUserId = id; if (typeof document !== 'undefined') {
+    if (id)
+        document.cookie = `impact_trainee=${encodeURIComponent(id)}; Max-Age=2592000; Path=/; SameSite=Lax`;
+    else
+        document.cookie = 'impact_trainee=; Max-Age=0; Path=/; SameSite=Lax';
+} }
+export class TraineeRepository {
+    async findById(id: string) { await ensureHydrated(); return trainees.find(t => t.id === id) ?? null; }
+    async findByEmail(email: string) { await ensureHydrated(); return trainees.find(t => t.email.toLowerCase() === email.trim().toLowerCase()) ?? null; }
+    async findAll(q?: TraineeQuery) { await ensureHydrated(); let r = trainees.filter(t => { const f = q?.filter; if (!f)
+        return true; if (f.status && t.status !== f.status)
+        return false; if (typeof f.emailVerified === 'boolean' && t.emailVerified !== f.emailVerified)
+        return false; if (f.enrolledInCourseId && !t.enrollments.some(e => e.courseId === f.enrolledInCourseId))
+        return false; if (f.searchQuery && !`${t.profile.firstName} ${t.profile.lastName} ${t.email} ${t.contact.phone ?? ''}`.toLowerCase().includes(f.searchQuery.toLowerCase()))
+        return false; return true; }); const o = q?.offset ?? 0; return typeof q?.limit === 'number' ? r.slice(o, o + q.limit) : r.slice(o); }
+    async create(input: any) { await ensureHydrated(); const t = { ...input, id: input.id ?? `trainee-${Date.now()}`, createdAt: now(), updatedAt: now(), enrollments: input.enrollments ?? [], progress: input.progress ?? [], certificates: input.certificates ?? [], status: input.status ?? 'active', emailVerified: input.emailVerified ?? false }; trainees.push(t); await persist(); return t; }
+    async update(id: string, input: any) { await ensureHydrated(); const i = trainees.findIndex(t => t.id === id); if (i < 0)
+        throw new Error('Trainee not found'); trainees[i] = { ...trainees[i], ...input, updatedAt: now() }; await persist(); return trainees[i]; }
+    async delete(id: string) { await ensureHydrated(); trainees = trainees.filter(t => t.id !== id); if (currentUserId === id)
+        setSession(null); await persist(); }
+    async verifyPassword(email: string, password: string) { await ensureHydrated(); const t = await this.findByEmail(email); return !!t && t.passwordHash === password; }
+    async updatePassword(id: string, password: string) { await ensureHydrated(); await this.update(id, { passwordHash: password }); }
+    async enrollInCourse(id: string, courseId: string, courseTitle: string) { await ensureHydrated(); const t = await this.findById(id); if (!t)
+        throw new Error('Trainee not found'); const e = { courseId, courseTitle, enrolledAt: now(), status: 'active' as const, progress: 0 }; t.enrollments.push(e); await persist(); return e; }
+    async updateEnrollment(id: string, eid: string, u: any) { await ensureHydrated(); const t = await this.findById(id); if (!t)
+        throw new Error('Trainee not found'); const i = t.enrollments.findIndex((e: any) => e.id === eid || e.courseId === eid); if (i < 0)
+        throw new Error('Enrollment not found'); t.enrollments[i] = { ...t.enrollments[i], ...u }; await persist(); return t.enrollments[i]; }
+    async getEnrollments(id: string) { await ensureHydrated(); return (await this.findById(id))?.enrollments ?? []; }
+    async getActiveEnrollments(id: string) { await ensureHydrated(); return (await this.getEnrollments(id)).filter(e => e.status === 'active'); }
+    async getCompletedEnrollments(id: string) { await ensureHydrated(); return (await this.getEnrollments(id)).filter(e => e.status === 'completed'); }
+    async updateProgress(id: string, p: CourseProgress) { await ensureHydrated(); const t = await this.findById(id); if (!t)
+        throw new Error('Trainee not found'); const i = t.progress.findIndex(x => x.courseId === p.courseId && x.lessonId === p.lessonId); if (i >= 0)
+        t.progress[i] = { ...t.progress[i], ...p };
+    else
+        t.progress.push(p); await persist(); }
+    async getProgress(id: string, courseId: string) { await ensureHydrated(); return (await this.findById(id))?.progress.filter(p => p.courseId === courseId) ?? []; }
+    async getCourseProgress(id: string, courseId: string, lessonId: string) { await ensureHydrated(); return (await this.getProgress(id, courseId)).find(p => p.lessonId === lessonId) ?? null; }
+    async issueCertificate(id: string, courseId: string, title: string) { await ensureHydrated(); const t = await this.findById(id); if (!t)
+        throw new Error('Trainee not found'); const c = { id: `cert-${Date.now()}`, courseId, courseTitle: title, issuedAt: now(), certificateNumber: `IMP-${Date.now()}`, verified: true }; t.certificates.push(c); await persist(); return c; }
+    async getCertificates(id: string) { await ensureHydrated(); return (await this.findById(id))?.certificates ?? []; }
+    async verifyCertificate(n: string) { await ensureHydrated(); for (const t of trainees) {
+        const c = t.certificates.find(x => x.certificateNumber === n);
+        if (c)
+            return c;
+    } return null; }
+    async search(q: string, limit = 20) { await ensureHydrated(); return this.findAll({ filter: { searchQuery: q }, limit }); }
+    async findByStatus(status: any, q?: TraineeQuery) { await ensureHydrated(); return this.findAll({ ...q, filter: { ...q?.filter, status } }); }
+    async getCount(q?: TraineeQuery) { await ensureHydrated(); return (await this.findAll(q)).length; }
+    async getActiveTraineesCount() { await ensureHydrated(); return trainees.filter(t => t.status === 'active').length; }
+    async loginUser(email: string, password: string) { await ensureHydrated(); if (await this.verifyPassword(email, password)) {
+        const user = await this.findByEmail(email);
+        if (user) {
+            user.lastLoginAt = now();
+            setSession(user.id);
+            await persist();
+            return user;
+        }
+    } return null; }
+    async getCurrentUser() { await ensureHydrated(); return currentUserId ? this.findById(currentUserId) : null; }
+    async logout() { await ensureHydrated(); setSession(null); }
+}
+export const traineeRepository = new TraineeRepository();
+

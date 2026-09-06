@@ -1,8 +1,54 @@
 import type { Coupon, CouponQuery, CouponFilter } from '@/types/coupon';
 import { DEFAULT_COUPONS } from '@/lib/data/seed-data';
 import { browserDbGet, browserDbSet } from '@/lib/data/browser-db';
-let coupons:Coupon[]=(DEFAULT_COUPONS as any[]).map((c:any,i:number)=>({id:c.id,code:c.code,description:'',type:'percentage',value:c.discount,applicability:'all',restrictions:[],maxUses:c.maxUses,usedCount:c.uses,startDate:new Date('2026-01-01'),endDate:new Date(c.expiry+'T23:59:59'),status:'active',createdAt:new Date('2026-01-01'),updatedAt:new Date('2026-01-01'),usageHistory:[]}));
-let hydrated=false;let hydration:Promise<void>|null=null;async function ensureHydrated(){if(hydrated)return;if(!hydration){hydration=(async()=>{const saved=await browserDbGet<Coupon[]>('coupons');if(saved !== null)coupons=saved.map(c=>({...c,startDate:new Date(c.startDate),endDate:new Date(c.endDate),createdAt:new Date(c.createdAt),updatedAt:new Date(c.updatedAt),usageHistory:(c.usageHistory??[]).map(x=>({...x,usedAt:new Date(x.usedAt)}))}));hydrated=true;})().catch(()=>{hydrated=true;});}await hydration;}async function persist(){await browserDbSet('coupons',coupons);}
-function active(c:Coupon){const n=new Date();return c.status==='active'&&n>=c.startDate&&n<=c.endDate&&(c.maxUses===undefined||c.usedCount<c.maxUses)}
-export class CouponRepository{async findById(id:string){await ensureHydrated();return coupons.find(c=>c.id===id)??null}async findByCode(code:string){await ensureHydrated();return coupons.find(c=>c.code.toLowerCase()===code.trim().toLowerCase())??null}async findAll(q?:CouponQuery){await ensureHydrated();let r=coupons.filter(c=>{const f=q?.filter;if(!f)return true;if(f.status&&c.status!==f.status)return false;if(f.type&&c.type!==f.type)return false;if(f.applicability&&c.applicability!==f.applicability)return false;if(typeof f.active==='boolean'&&active(c)!==f.active)return false;if(f.searchQuery&&!`${c.code} ${c.description??''}`.toLowerCase().includes(f.searchQuery.toLowerCase()))return false;return true});if(q?.order==='asc')r.sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime());else r.sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime());const o=q?.offset??0;return typeof q?.limit==='number'?r.slice(o,o+q.limit):r.slice(o)}async create(input:any){await ensureHydrated();const n=new Date();const c={...input,id:input.id??`coupon-${Date.now()}`,code:input.code.trim().toUpperCase(),usedCount:input.usedCount??0,usageHistory:[],createdAt:n,updatedAt:n};coupons.push(c);await persist();return c}async update(id:string,u:any){await ensureHydrated();const i=coupons.findIndex(c=>c.id===id);if(i<0)throw new Error('Coupon not found');coupons[i]={...coupons[i],...u,updatedAt:new Date()};await persist();return coupons[i]}async delete(id:string){await ensureHydrated();coupons=coupons.filter(c=>c.id!==id);await persist()}async validateCode(code:string,traineeId?:string,orderValue=0){await ensureHydrated();const c=await this.findByCode(code);if(!c||!active(c))return {valid:false,error:'الكوبون غير صالح أو منتهي'};if(c.minimumOrderValue&&orderValue<c.minimumOrderValue)return {valid:false,error:'الحد الأدنى للطلب غير متحقق'};return {valid:true,coupon:c}}async applyCoupon(id:string,traineeId:string,orderId:string,discountAmount:number){await ensureHydrated();const c=await this.findById(id);if(!c)throw new Error('Coupon not found');c.usedCount++;c.usageHistory.push({traineeId,orderId,discountAmount,usedAt:new Date()});await persist()}async removeCouponUsage(id:string,traineeId:string,orderId:string){await ensureHydrated();const c=await this.findById(id);if(!c)return;c.usageHistory=c.usageHistory.filter(x=>!(x.traineeId===traineeId&&x.orderId===orderId));c.usedCount=Math.max(0,c.usedCount-1);await persist()}async getUsageCount(id:string){await ensureHydrated();return (await this.findById(id))?.usedCount??0}async getTraineeUsageCount(id:string,traineeId:string){await ensureHydrated();return (await this.findById(id))?.usageHistory.filter(x=>x.traineeId===traineeId).length??0}async incrementUsage(id:string){await ensureHydrated();const c=await this.findById(id);if(c){c.usedCount++;await persist()}}async decrementUsage(id:string){await ensureHydrated();const c=await this.findById(id);if(c)c.usedCount=Math.max(0,c.usedCount-1);await persist()}async search(q:string,limit=20){await ensureHydrated();return this.findAll({filter:{searchQuery:q},limit})}async findActiveCoupons(q?:CouponQuery){await ensureHydrated();return this.findAll({...q,filter:{...q?.filter,active:true}})}async findExpiredCoupons(q?:CouponQuery){await ensureHydrated();return this.findAll(q).then(r=>r.filter(c=>!active(c)))}async getCount(f?:CouponFilter){await ensureHydrated();return (await this.findAll({filter:f})).length}async getTotalDiscount(f?:CouponFilter){await ensureHydrated();return (await this.findAll({filter:f})).reduce((a,c)=>a+c.usedCount*c.value,0)}async bulkUpdateStatus(ids:string[],status:any){await ensureHydrated();const s=new Set(ids);coupons=coupons.map(c=>s.has(c.id)?{...c,status,updatedAt:new Date()}:c);await persist()}}
-export const couponRepository=new CouponRepository();
+let coupons: Coupon[] = (DEFAULT_COUPONS as any[]).map((c: any, i: number) => ({ id: c.id, code: c.code, description: '', type: 'percentage', value: c.discount, applicability: 'all', restrictions: [], maxUses: c.maxUses, usedCount: c.uses, startDate: new Date('2026-01-01'), endDate: new Date(c.expiry + 'T23:59:59'), status: 'active', createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'), usageHistory: [] }));
+let hydrated = false;
+let hydration: Promise<void> | null = null;
+async function ensureHydrated() { if (hydrated)
+    return; if (!hydration) {
+    hydration = (async () => { const saved = await browserDbGet<Coupon[]>('coupons'); if (saved !== null)
+        coupons = saved.map(c => ({ ...c, startDate: new Date(c.startDate), endDate: new Date(c.endDate), createdAt: new Date(c.createdAt), updatedAt: new Date(c.updatedAt), usageHistory: (c.usageHistory ?? []).map(x => ({ ...x, usedAt: new Date(x.usedAt) })) })); hydrated = true; })().catch(() => { hydrated = true; });
+} await hydration; }
+async function persist() { await browserDbSet('coupons', coupons); }
+function active(c: Coupon) { const n = new Date(); return c.status === 'active' && n >= c.startDate && n <= c.endDate && (c.maxUses === undefined || c.usedCount < c.maxUses); }
+export class CouponRepository {
+    async findById(id: string) { await ensureHydrated(); return coupons.find(c => c.id === id) ?? null; }
+    async findByCode(code: string) { await ensureHydrated(); return coupons.find(c => c.code.toLowerCase() === code.trim().toLowerCase()) ?? null; }
+    async findAll(q?: CouponQuery) { await ensureHydrated(); let r = coupons.filter(c => { const f = q?.filter; if (!f)
+        return true; if (f.status && c.status !== f.status)
+        return false; if (f.type && c.type !== f.type)
+        return false; if (f.applicability && c.applicability !== f.applicability)
+        return false; if (typeof f.active === 'boolean' && active(c) !== f.active)
+        return false; if (f.searchQuery && !`${c.code} ${c.description ?? ''}`.toLowerCase().includes(f.searchQuery.toLowerCase()))
+        return false; return true; }); if (q?.order === 'asc')
+        r.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    else
+        r.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); const o = q?.offset ?? 0; return typeof q?.limit === 'number' ? r.slice(o, o + q.limit) : r.slice(o); }
+    async create(input: any) { await ensureHydrated(); const n = new Date(); const c = { ...input, id: input.id ?? `coupon-${Date.now()}`, code: input.code.trim().toUpperCase(), usedCount: input.usedCount ?? 0, usageHistory: [], createdAt: n, updatedAt: n }; coupons.push(c); await persist(); return c; }
+    async update(id: string, u: any) { await ensureHydrated(); const i = coupons.findIndex(c => c.id === id); if (i < 0)
+        throw new Error('Coupon not found'); coupons[i] = { ...coupons[i], ...u, updatedAt: new Date() }; await persist(); return coupons[i]; }
+    async delete(id: string) { await ensureHydrated(); coupons = coupons.filter(c => c.id !== id); await persist(); }
+    async validateCode(code: string, traineeId?: string, orderValue = 0) { await ensureHydrated(); const c = await this.findByCode(code); if (!c || !active(c))
+        return { valid: false, error: 'الكوبون غير صالح أو منتهي' }; if (c.minimumOrderValue && orderValue < c.minimumOrderValue)
+        return { valid: false, error: 'الحد الأدنى للطلب غير متحقق' }; return { valid: true, coupon: c }; }
+    async applyCoupon(id: string, traineeId: string, orderId: string, discountAmount: number) { await ensureHydrated(); const c = await this.findById(id); if (!c)
+        throw new Error('Coupon not found'); c.usedCount++; c.usageHistory.push({ traineeId, orderId, discountAmount, usedAt: new Date() }); await persist(); }
+    async removeCouponUsage(id: string, traineeId: string, orderId: string) { await ensureHydrated(); const c = await this.findById(id); if (!c)
+        return; c.usageHistory = c.usageHistory.filter(x => !(x.traineeId === traineeId && x.orderId === orderId)); c.usedCount = Math.max(0, c.usedCount - 1); await persist(); }
+    async getUsageCount(id: string) { await ensureHydrated(); return (await this.findById(id))?.usedCount ?? 0; }
+    async getTraineeUsageCount(id: string, traineeId: string) { await ensureHydrated(); return (await this.findById(id))?.usageHistory.filter(x => x.traineeId === traineeId).length ?? 0; }
+    async incrementUsage(id: string) { await ensureHydrated(); const c = await this.findById(id); if (c) {
+        c.usedCount++;
+        await persist();
+    } }
+    async decrementUsage(id: string) { await ensureHydrated(); const c = await this.findById(id); if (c)
+        c.usedCount = Math.max(0, c.usedCount - 1); await persist(); }
+    async search(q: string, limit = 20) { await ensureHydrated(); return this.findAll({ filter: { searchQuery: q }, limit }); }
+    async findActiveCoupons(q?: CouponQuery) { await ensureHydrated(); return this.findAll({ ...q, filter: { ...q?.filter, active: true } }); }
+    async findExpiredCoupons(q?: CouponQuery) { await ensureHydrated(); return this.findAll(q).then(r => r.filter(c => !active(c))); }
+    async getCount(f?: CouponFilter) { await ensureHydrated(); return (await this.findAll({ filter: f })).length; }
+    async getTotalDiscount(f?: CouponFilter) { await ensureHydrated(); return (await this.findAll({ filter: f })).reduce((a, c) => a + c.usedCount * c.value, 0); }
+    async bulkUpdateStatus(ids: string[], status: any) { await ensureHydrated(); const s = new Set(ids); coupons = coupons.map(c => s.has(c.id) ? { ...c, status, updatedAt: new Date() } : c); await persist(); }
+}
+export const couponRepository = new CouponRepository();
+

@@ -1,6 +1,30 @@
 import type { Service, ServiceQuery, ServiceFilter } from '@/types/service';
 import { DEFAULT_SERVICES } from '@/lib/data/seed-data';
-function slugify(v:string){return v.trim().toLowerCase().replace(/\s+/g,'-').replace(/[^\p{L}\p{N}-]/gu,'');}
-let services:Service[]=(DEFAULT_SERVICES as any[]).map((s,i)=>({id:s.id,title:s.title,slug:slugify(s.title),description:s.fullDescription,shortDescription:s.shortDescription,type:i===0?'corporate-training':i===1?'corporate-training':i===2?'assessment':'consulting',delivery:i===0||i===1?'remote':'hybrid',objectives:s.objectives,outcomes:s.objectives,deliverables:s.deliverables.map((x:string,j:number)=>({id:`${s.id}-d${j}`,title:x,order:j+1})),target:{audience:s.audience},pricing:{basePrice:0,currency:'SAR',pricingModel:'custom',customQuote:true},featured:false,published:true,status:'published',createdAt:new Date('2026-01-01'),updatedAt:new Date('2026-01-01')}));
-export class ServiceRepository{async findById(id:string){return services.find(s=>s.id===id)??null}async findBySlug(slug:string){return services.find(s=>s.slug===slugify(slug))??null}async findAll(q?:ServiceQuery){let r=services.filter(s=>{const f=q?.filter;if(!f)return true;if(f.type&&s.type!==f.type)return false;if(f.delivery&&s.delivery!==f.delivery)return false;if(f.categoryId&&s.categoryId!==f.categoryId)return false;if(typeof f.published==='boolean'&&s.published!==f.published)return false;if(typeof f.featured==='boolean'&&s.featured!==f.featured)return false;return true});if(q?.sort==='title')r.sort((a,b)=>a.title.localeCompare(b.title,'ar'));if(q?.order==='desc')r.reverse();const o=q?.offset??0;return typeof q?.limit==='number'?r.slice(o,o+q.limit):r.slice(o)}async create(input:any){const now=new Date();const s={...input,id:`service-${Date.now()}`,slug:input.slug??slugify(input.title),createdAt:now,updatedAt:now};services.push(s);return s}async update(id:string,input:any){const i=services.findIndex(s=>s.id===id);if(i<0)throw new Error('Service not found');services[i]={...services[i],...input,updatedAt:new Date()};return services[i]}async delete(id:string){services=services.filter(s=>s.id!==id)}async search(q:string,limit=20){const x=q.toLowerCase();return services.filter(s=>`${s.title} ${s.description}`.toLowerCase().includes(x)).slice(0,limit)}async findByType(type:any,q?:ServiceQuery){return this.findAll({...q,filter:{...q?.filter,type}})}async findByCategory(categoryId:string,q?:ServiceQuery){return this.findAll({...q,filter:{...q?.filter,categoryId}})}async findFeatured(q?:ServiceQuery){return this.findAll({...q,filter:{...q?.filter,featured:true}})}async findPublished(q?:ServiceQuery){return this.findAll({...q,filter:{...q?.filter,published:true}})}async getCount(filter?:ServiceFilter){return (await this.findAll({filter})).length}async bulkUpdate(ids:string[],updates:any){const set=new Set(ids);services=services.map(s=>set.has(s.id)?{...s,...updates,updatedAt:new Date()}:s)}}
-export const serviceRepository=new ServiceRepository();
+function slugify(v: string) { return v.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}-]/gu, ''); }
+let services: Service[] = (DEFAULT_SERVICES as any[]).map((s, i) => ({ id: s.id, title: s.title, slug: slugify(s.title), description: s.fullDescription, shortDescription: s.shortDescription, type: i === 0 ? 'corporate-training' : i === 1 ? 'corporate-training' : i === 2 ? 'assessment' : 'consulting', delivery: i === 0 || i === 1 ? 'remote' : 'hybrid', objectives: s.objectives, outcomes: s.objectives, deliverables: s.deliverables.map((x: string, j: number) => ({ id: `${s.id}-d${j}`, title: x, order: j + 1 })), target: { audience: s.audience }, pricing: { basePrice: 0, currency: 'SAR', pricingModel: 'custom', customQuote: true }, featured: false, published: true, status: 'published', createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') }));
+export class ServiceRepository {
+    async findById(id: string) { return services.find(s => s.id === id) ?? null; }
+    async findBySlug(slug: string) { return services.find(s => s.slug === slugify(slug)) ?? null; }
+    async findAll(q?: ServiceQuery) { let r = services.filter(s => { const f = q?.filter; if (!f)
+        return true; if (f.type && s.type !== f.type)
+        return false; if (f.delivery && s.delivery !== f.delivery)
+        return false; if (f.categoryId && s.categoryId !== f.categoryId)
+        return false; if (typeof f.published === 'boolean' && s.published !== f.published)
+        return false; if (typeof f.featured === 'boolean' && s.featured !== f.featured)
+        return false; return true; }); if (q?.sort === 'title')
+        r.sort((a, b) => a.title.localeCompare(b.title, 'ar')); if (q?.order === 'desc')
+        r.reverse(); const o = q?.offset ?? 0; return typeof q?.limit === 'number' ? r.slice(o, o + q.limit) : r.slice(o); }
+    async create(input: any) { const now = new Date(); const s = { ...input, id: `service-${Date.now()}`, slug: input.slug ?? slugify(input.title), createdAt: now, updatedAt: now }; services.push(s); return s; }
+    async update(id: string, input: any) { const i = services.findIndex(s => s.id === id); if (i < 0)
+        throw new Error('Service not found'); services[i] = { ...services[i], ...input, updatedAt: new Date() }; return services[i]; }
+    async delete(id: string) { services = services.filter(s => s.id !== id); }
+    async search(q: string, limit = 20) { const x = q.toLowerCase(); return services.filter(s => `${s.title} ${s.description}`.toLowerCase().includes(x)).slice(0, limit); }
+    async findByType(type: any, q?: ServiceQuery) { return this.findAll({ ...q, filter: { ...q?.filter, type } }); }
+    async findByCategory(categoryId: string, q?: ServiceQuery) { return this.findAll({ ...q, filter: { ...q?.filter, categoryId } }); }
+    async findFeatured(q?: ServiceQuery) { return this.findAll({ ...q, filter: { ...q?.filter, featured: true } }); }
+    async findPublished(q?: ServiceQuery) { return this.findAll({ ...q, filter: { ...q?.filter, published: true } }); }
+    async getCount(filter?: ServiceFilter) { return (await this.findAll({ filter })).length; }
+    async bulkUpdate(ids: string[], updates: any) { const set = new Set(ids); services = services.map(s => set.has(s.id) ? { ...s, ...updates, updatedAt: new Date() } : s); }
+}
+export const serviceRepository = new ServiceRepository();
+

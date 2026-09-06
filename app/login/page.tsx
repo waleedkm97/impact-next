@@ -1,5 +1,28 @@
 'use client';
-import Link from 'next/link';import{useState}from'react';import{useRouter}from'next/navigation';import{traineeRepository}from'@/lib/data/repositories/trainee-repository';
-export default function Login(){const[email,setEmail]=useState('');const[password,setPassword]=useState('');const[msg,setMsg]=useState('');const[loading,setLoading]=useState(false);const r=useRouter();
- async function submit(e:React.FormEvent){e.preventDefault();setMsg('');setLoading(true);try{const u=await traineeRepository.loginUser(email,password);if(!u){setMsg('البريد الإلكتروني أو كلمة المرور غير صحيحة.');return}r.push('/account')}catch{setMsg('حدث خطأ أثناء تسجيل الدخول، حاول مرة أخرى.')}finally{setLoading(false)}}
- return <main dir="rtl" className="auth-page"><form className="auth-card" onSubmit={submit}><h1>تسجيل الدخول</h1><p>ادخل إلى حسابك لمتابعة دوراتك وحجوزاتك.</p><label>البريد الإلكتروني<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/></label><label>كلمة المرور<input type="password" required value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></label>{msg&&<div className="auth-error">{msg}</div>}<button type="submit" disabled={loading}>{loading?'جاري الدخول...':'دخول'}</button><div className="auth-demo">حساب تجريبي: sara@example.com / password</div><p className="auth-register">ليس لديك حساب؟ <Link href="/register">إنشاء حساب جديد</Link></p></form></main>}
+import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
+export default function Login() {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [msg, setMsg] = useState('');
+    const [loading, setLoading] = useState(false);
+    const r = useRouter();
+    async function submit(e: React.FormEvent) { e.preventDefault(); setMsg(''); setLoading(true); try {
+        const u = await traineeRepository.loginUser(email, password);
+        if (!u) {
+            setMsg('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
+            return;
+        }
+        r.push('/account');
+    }
+    catch {
+        setMsg('حدث خطأ أثناء تسجيل الدخول، حاول مرة أخرى.');
+    }
+    finally {
+        setLoading(false);
+    } }
+    return <main dir="rtl" className="auth-page"><form className="auth-card" onSubmit={submit}><h1>تسجيل الدخول</h1><p>ادخل إلى حسابك لمتابعة دوراتك وحجوزاتك.</p><label>البريد الإلكتروني<input type="email" required value={email} onChange={e => setEmail(e.target.value)} autoComplete="email"/></label><label>كلمة المرور<input type="password" required value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"/></label>{msg && <div className="auth-error">{msg}</div>}<button type="submit" disabled={loading}>{loading ? 'جاري الدخول...' : 'دخول'}</button><div className="auth-demo">حساب تجريبي: sara@example.com / password</div><p className="auth-register">ليس لديك حساب؟ <Link href="/register">إنشاء حساب جديد</Link></p></form></main>;
+}
+

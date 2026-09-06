@@ -1,27 +1,17 @@
 "use client";
-
 import { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 export default function CheckoutPage() {
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    // لاحقًا:
-    // إنشاء Order
-    // ثم Payment Gateway
-  }
-
-  return (
-    <main dir="rtl" className="container mx-auto max-w-5xl px-6 py-12">
+    function handleSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        // لاحقًا:
+        // إنشاء Order
+        // ثم Payment Gateway
+    }
+    return (<main dir="rtl" className="container mx-auto max-w-5xl px-6 py-12">
       <h1 className="mb-10 text-4xl font-bold">
         حجز الدورة
       </h1>
@@ -41,7 +31,7 @@ export default function CheckoutPage() {
                   الاسم الكامل
                 </Label>
 
-                <Input id="name" required />
+                <Input id="name" required/>
               </div>
 
               <div className="space-y-2">
@@ -49,7 +39,7 @@ export default function CheckoutPage() {
                   البريد الإلكتروني
                 </Label>
 
-                <Input id="email" type="email" required />
+                <Input id="email" type="email" required/>
               </div>
 
               <div className="space-y-2">
@@ -57,7 +47,7 @@ export default function CheckoutPage() {
                   رقم الجوال
                 </Label>
 
-                <Input id="phone" required />
+                <Input id="phone" required/>
               </div>
 
               <Button className="w-full" type="submit">
@@ -88,6 +78,6 @@ export default function CheckoutPage() {
           </CardContent>
         </Card>
       </div>
-    </main>
-  );
+    </main>);
 }
+

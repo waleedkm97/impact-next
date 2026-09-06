@@ -1,3 +1,7 @@
 'use client';
-import Link from 'next/link';import {useEffect,useState} from 'react';import {serviceRepository} from '@/lib/data/repositories/service-repository';import type {Service} from '@/types/service';
-export default function ServicesPage(){const[services,setServices]=useState<Service[]>([]);useEffect(()=>{serviceRepository.findAll().then(setServices)},[]);return <main><section className="section services-section"><div className="section-inner"><div className="section-header"><p className="eyebrow">خدماتنا</p><h2>حلول تدريبية واستشارية متكاملة</h2><p className="section-lead">نقدم حلولاً متخصصة تساعد منشأتك على تطوير الكفاءات وتحسين الأداء وتحقيق أثر ملموس.</p></div><div className="service-grid">{services.map(s=><article key={s.id} className="service-card"><h3>{s.title}</h3><p>{s.shortDescription||s.description}</p><Link href={`/service-details?id=${s.id}`} className="btn-secondary">عرض التفاصيل</Link></article>)}</div></div></section></main>}
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { serviceRepository } from '@/lib/data/repositories/service-repository';
+import type { Service } from '@/types/service';
+export default function ServicesPage() { const [services, setServices] = useState<Service[]>([]); useEffect(() => { serviceRepository.findAll().then(setServices); }, []); return <main><section className="section services-section"><div className="section-inner"><div className="section-header"><p className="eyebrow">خدماتنا</p><h2>حلول تدريبية واستشارية متكاملة</h2><p className="section-lead">نقدم حلولاً متخصصة تساعد منشأتك على تطوير الكفاءات وتحسين الأداء وتحقيق أثر ملموس.</p></div><div className="service-grid">{services.map(s => <article key={s.id} className="service-card"><h3>{s.title}</h3><p>{s.shortDescription || s.description}</p><Link href={`/service-details?id=${s.id}`} className="btn-secondary">عرض التفاصيل</Link></article>)}</div></div></section></main>; }
+

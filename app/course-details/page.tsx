@@ -1,3 +1,9 @@
 'use client';
-import Link from 'next/link';import {useSearchParams} from 'next/navigation';import {useEffect,useState} from 'react';import {courseRepository} from '@/lib/data/repositories/course-repository';import type {Course} from '@/types/course';
-export default function CourseDetails(){const id=useSearchParams().get('id')||'';const[c,setC]=useState<Course|null>(null);useEffect(()=>{courseRepository.findById(id).then(setC)},[id]);if(!c)return <main className="container mx-auto px-6 py-12" dir="rtl">جاري التحميل...</main>;return <main className="container mx-auto px-6 py-12" dir="rtl"><span className="card-label">دورة مسجلة</span><h1>{c.title}</h1><p>{c.description}</p><p><strong>{c.price} ريال</strong></p><h2>المحتوى</h2><ol>{(c.lessons??[]).map(l=><li key={l.id}>{l.title} {l.type==='quiz'?'— اختبار تفاعلي':''}</li>)}</ol><div style={{display:'flex',gap:10}}><Link href={`/course-learning?id=${c.id}`} className="btn-primary">ابدأ التعلم</Link><Link href={`/checkout?id=${c.id}`} className="btn-secondary">التسجيل في الدورة</Link></div></main>}
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { courseRepository } from '@/lib/data/repositories/course-repository';
+import type { Course } from '@/types/course';
+export default function CourseDetails() { const id = useSearchParams().get('id') || ''; const [c, setC] = useState<Course | null>(null); useEffect(() => { courseRepository.findById(id).then(setC); }, [id]); if (!c)
+    return <main className="container mx-auto px-6 py-12" dir="rtl">جاري التحميل...</main>; return <main className="container mx-auto px-6 py-12" dir="rtl"><span className="card-label">دورة مسجلة</span><h1>{c.title}</h1><p>{c.description}</p><p><strong>{c.price} ريال</strong></p><h2>المحتوى</h2><ol>{(c.lessons ?? []).map(l => <li key={l.id}>{l.title} {l.type === 'quiz' ? '— اختبار تفاعلي' : ''}</li>)}</ol><div style={{ display: 'flex', gap: 10 }}><Link href={`/course-learning?id=${c.id}`} className="btn-primary">ابدأ التعلم</Link><Link href={`/checkout?id=${c.id}`} className="btn-secondary">التسجيل في الدورة</Link></div></main>; }
+
