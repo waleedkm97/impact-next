@@ -62,6 +62,7 @@ export interface CourseSchedule {
 
 export interface CourseAssessment {
   id: string;
+    assessmentType?: 'pre' | 'post' | 'evaluation';
   courseId: string;
   title: string;
   description?: string;

@@ -42,24 +42,61 @@ export interface TraineeCompany {
 }
 
 export type AssessmentState = 'locked' | 'available' | 'completed';
+
 export type AttendanceStatus = 'not-marked' | 'present' | 'absent';
+
+export interface AttendanceDay {
+  date: Date;
+  status: AttendanceStatus;
+  markedAt?: Date;
+}
 
 export interface CourseEnrollment {
   id?: string;
+
   courseId: string;
   courseTitle: string;
+
   enrolledAt: Date;
+
   scheduleId?: string;
   groupId?: string;
+
   completedAt?: Date;
+
   status: 'active' | 'completed' | 'dropped' | 'expired';
-  progress: number; // 0-100 percentage
+
+  progress: number;
+
   lastAccessedAt?: Date;
+
   certificateId?: string;
+
+  /*
+   * حالة التقييمات
+   */
   preAssessment?: AssessmentState;
   postAssessment?: AssessmentState;
   courseEvaluation?: AssessmentState;
+
+  /*
+   * نتائج التقييمات
+   */
+  preAssessmentScore?: number;
+  postAssessmentScore?: number;
+
+  /*
+   * تواريخ إكمال التقييمات
+   */
+  preAssessmentCompletedAt?: Date;
+  postAssessmentCompletedAt?: Date;
+  courseEvaluationCompletedAt?: Date;
+
+  /*
+   * الحضور
+   */
   attendance?: AttendanceStatus;
+  attendanceDays?: AttendanceDay[];
   attendanceMode?: 'in-person' | 'online';
 }
 
@@ -68,8 +105,8 @@ export interface CourseProgress {
   lessonId: string;
   completed: boolean;
   completedAt?: Date;
-  timeSpent?: number; // in seconds
-  score?: number; // For quiz lessons
+  timeSpent?: number;
+  score?: number;
   attempts?: number;
 }
 
@@ -86,29 +123,30 @@ export interface Certificate {
 
 export interface Trainee {
   id: string;
+
   profile: TraineeProfile;
   contact: TraineeContact;
+
   company?: TraineeCompany;
-  
-  // Authentication (password should be hashed, never stored plain text)
-  email: string; // Duplicate for convenience, references contact.email
-  passwordHash: string; // Hashed password only
-  
-  // Enrollment and progress
+
+  email: string;
+  passwordHash: string;
+
   enrollments: CourseEnrollment[];
+
   progress: CourseProgress[];
+
   certificates: Certificate[];
-  
-  // Account status
+
   status: TraineeStatus;
+
   emailVerified: boolean;
-  
-  // Metadata
+
   createdAt: Date;
   updatedAt: Date;
+
   lastLoginAt?: Date;
-  
-  // Preferences
+
   preferences?: {
     language: string;
     notifications: {
@@ -119,7 +157,6 @@ export interface Trainee {
   };
 }
 
-// Trainee filter and query types
 export interface TraineeFilter {
   status?: TraineeStatus;
   emailVerified?: boolean;

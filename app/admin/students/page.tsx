@@ -31,6 +31,7 @@ export default function Students() {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<TraineeForm>(initialForm);
   const [search, setSearch] = useState('');
+  const [attendanceTrainee, setAttendanceTrainee] = useState<any>(null);
 
   async function load() {
     setItems(await traineeRepository.findAll());
@@ -105,6 +106,23 @@ export default function Students() {
     }
 
     setOpen(false);
+    await load();
+  }
+
+  async function openAttendance(trainee: any) {
+    const enrollment = trainee.enrollments?.[0];
+    if (!enrollment) {
+      alert('لا توجد دورة مسجلة لهذا المتدرب.');
+      return;
+    }
+    await traineeRepository.ensureAttendanceDays(trainee.id, enrollment.id ?? enrollment.courseId);
+    const refreshed = await traineeRepository.findById(trainee.id);
+    setAttendanceTrainee(refreshed);
+  }
+
+  async function markAttendance(traineeId: string, enrollmentId: string, dayIndex: number, status: 'present' | 'absent') {
+    const updated = await traineeRepository.updateAttendanceDay(traineeId, enrollmentId, dayIndex, status);
+    setAttendanceTrainee((current: any) => current ? { ...current, enrollments: current.enrollments.map((e: any) => e.id === updated.id ? updated : e) } : current);
     await load();
   }
 
@@ -195,6 +213,12 @@ export default function Students() {
                     تعديل
                   </button>{' '}
                   <button
+                    className="admin-btn admin-btn-light"
+                    onClick={() => void openAttendance(trainee)}
+                  >
+                    الحضور
+                  </button>{' '}
+                  <button
                     className="admin-btn admin-btn-danger"
                     onClick={() => void remove(trainee.id)}
                   >
@@ -206,6 +230,38 @@ export default function Students() {
           </tbody>
         </table>
       </div>
+
+      {attendanceTrainee && (
+        <div className="admin-modal-backdrop">
+          <div className="admin-modal" style={{ maxWidth: 760 }}>
+            <div className="admin-modal-header">
+              <h2>الحضور — {attendanceTrainee.profile?.firstName} {attendanceTrainee.profile?.lastName}</h2>
+              <button type="button" className="admin-modal-close" onClick={() => setAttendanceTrainee(null)}>×</button>
+            </div>
+            <div className="admin-modal-body">
+              {(attendanceTrainee.enrollments ?? []).map((enrollment: any) => (
+                <div key={enrollment.id ?? enrollment.courseId} style={{ marginBottom: 20 }}>
+                  <h3>{enrollment.courseTitle}</h3>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {(enrollment.attendanceDays ?? []).map((day: any, index: number) => (
+                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 10 }}>
+                        <strong>اليوم {index + 1} — {new Date(day.date).toLocaleDateString('en-GB')}</strong>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" className={`admin-btn ${day.status === 'present' ? 'admin-btn-primary' : 'admin-btn-light'}`} onClick={() => void markAttendance(attendanceTrainee.id, enrollment.id ?? enrollment.courseId, index, 'present')}>حاضر</button>
+                          <button type="button" className={`admin-btn ${day.status === 'absent' ? 'admin-btn-danger' : 'admin-btn-light'}`} onClick={() => void markAttendance(attendanceTrainee.id, enrollment.id ?? enrollment.courseId, index, 'absent')}>غائب</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="admin-modal-footer">
+              <button type="button" className="admin-btn admin-btn-light" onClick={() => setAttendanceTrainee(null)}>إغلاق</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="admin-modal-backdrop">

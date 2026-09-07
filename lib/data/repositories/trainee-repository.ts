@@ -137,6 +137,11 @@ function normalizeTrainee(trainee: Trainee): Trainee {
       lastAccessedAt: enrollment.lastAccessedAt
         ? date(enrollment.lastAccessedAt)
         : undefined,
+      attendanceDays: (enrollment.attendanceDays ?? []).map((day) => ({
+        ...day,
+        date: date(day.date),
+        markedAt: day.markedAt ? date(day.markedAt) : undefined,
+      })),
     })),
     progress: (trainee.progress ?? []).map((progress) => ({
       ...progress,
@@ -316,6 +321,26 @@ export class TraineeRepository {
     await this.update(id, { passwordHash: password });
   }
 
+  private async buildAttendanceDays(scheduleId?: string) {
+    let startDate = now();
+
+    if (scheduleId) {
+      try {
+        const { scheduleRepository } = await import('./schedule-repository');
+        const schedule = await scheduleRepository.findById(scheduleId);
+        if (schedule?.startDate) startDate = date(schedule.startDate);
+      } catch {
+        // Fall back to enrollment date when no schedule is available.
+      }
+    }
+
+    return Array.from({ length: 3 }, (_, index) => {
+      const day = new Date(startDate);
+      day.setDate(day.getDate() + index);
+      return { date: day, status: 'not-marked' as const };
+    });
+  }
+
   async enrollInCourse(
     id: string,
     courseId: string,
@@ -353,10 +378,11 @@ export class TraineeRepository {
       status: 'active',
       progress: 0,
       preAssessment: 'available',
-      postAssessment: 'locked',
-      courseEvaluation: 'available',
+postAssessment: 'locked',
+courseEvaluation: 'locked',
       attendance: 'not-marked',
       attendanceMode: options?.scheduleId ? 'in-person' : 'online',
+      attendanceDays: await this.buildAttendanceDays(options?.scheduleId),
     };
 
     trainee.enrollments.push(enrollment);
@@ -458,41 +484,208 @@ export class TraineeRepository {
     const enrollment = trainee.enrollments.find((item) => item.id === enrollmentId || item.courseId === enrollmentId);
     if (!enrollment) throw new Error('Enrollment not found');
     enrollment.progress = 100;
-    enrollment.status = 'completed';
-    enrollment.completedAt = now();
-    enrollment.postAssessment = 'available';
-    const existingCertificate = trainee.certificates.find(c => c.courseId === enrollment.courseId);
-    if (!existingCertificate) {
-      const certificate: Certificate = { id: `cert-${Date.now()}`, courseId: enrollment.courseId, courseTitle: enrollment.courseTitle, issuedAt: now(), certificateNumber: `IMP-${Date.now()}`, templateId: 'certificate-template.png', verified: true };
-      trainee.certificates.push(certificate);
-      enrollment.certificateId = certificate.id;
-    } else {
-      enrollment.certificateId = existingCertificate.id;
+enrollment.status = 'completed';
+enrollment.completedAt = now();
+
+/*
+ * بعد إكمال البرنامج:
+ * - Post يبقى مقفلاً حتى تفتحه الإدارة للمجموعة.
+ * - Course Evaluation يبقى مقفلاً حتى تفتحه الإدارة.
+ * - الشهادة لا تصدر هنا.
+ */
+enrollment.postAssessment = 'locked';
+enrollment.courseEvaluation = 'locked';
+    trainee.updatedAt = now();
+    await persist();
+    return enrollment;
+  }
+
+   async updateEnrollmentAssessment(
+    id: string,
+    enrollmentId: string,
+    type:
+      | 'preAssessment'
+      | 'postAssessment'
+      | 'courseEvaluation',
+    state:
+      | 'locked'
+      | 'available'
+      | 'completed',
+  ) {
+    await ensureHydrated();
+
+    const trainee = trainees.find(
+      (item) => item.id === id,
+    );
+
+    if (!trainee) {
+      throw new Error('Trainee not found');
     }
-    trainee.updatedAt = now();
-    await persist();
-    return enrollment;
-  }
 
-  async updateEnrollmentAssessment(id: string, enrollmentId: string, type: 'preAssessment' | 'postAssessment' | 'courseEvaluation', state: 'locked' | 'available' | 'completed') {
-    await ensureHydrated();
-    const trainee = trainees.find(item => item.id === id);
-    if (!trainee) throw new Error('Trainee not found');
-    const enrollment = trainee.enrollments.find(item => item.id === enrollmentId || item.courseId === enrollmentId);
-    if (!enrollment) throw new Error('Enrollment not found');
+    const enrollment = trainee.enrollments.find(
+      (item) =>
+        item.id === enrollmentId ||
+        item.courseId === enrollmentId,
+    );
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
     enrollment[type] = state;
+
+    if (type === 'preAssessment' && state === 'completed') {
+      enrollment.preAssessmentCompletedAt = now();
+    }
+
+    if (type === 'postAssessment' && state === 'completed') {
+      enrollment.postAssessmentCompletedAt = now();
+    }
+
+    if (
+      type === 'courseEvaluation' &&
+      state === 'completed'
+    ) {
+      enrollment.courseEvaluationCompletedAt = now();
+    }
+
     trainee.updatedAt = now();
+
     await persist();
+
+    if (state === 'completed') {
+      await this.issueCertificateIfEligible(
+        id,
+        enrollment.id ?? enrollment.courseId,
+      );
+    }
+
     return enrollment;
   }
 
-  async updateAttendance(id: string, enrollmentId: string, status: 'not-marked' | 'present' | 'absent') {
+  async issueCertificateIfEligible(
+    id: string,
+    enrollmentId: string,
+  ) {
     await ensureHydrated();
-    const trainee = trainees.find(item => item.id === id);
+
+    const trainee = trainees.find(
+      (item) => item.id === id,
+    );
+
+    if (!trainee) {
+      throw new Error('Trainee not found');
+    }
+
+    const enrollment = trainee.enrollments.find(
+      (item) =>
+        item.id === enrollmentId ||
+        item.courseId === enrollmentId,
+    );
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
+    const allRequirementsCompleted =
+      enrollment.progress >= 100 &&
+      enrollment.preAssessment === 'completed' &&
+      enrollment.postAssessment === 'completed' &&
+      enrollment.courseEvaluation === 'completed';
+
+    if (!allRequirementsCompleted) {
+      return null;
+    }
+
+    const existingCertificate =
+      trainee.certificates.find(
+        (certificate) =>
+          certificate.courseId === enrollment.courseId,
+      );
+
+    if (existingCertificate) {
+      enrollment.certificateId =
+        existingCertificate.id;
+
+      await persist();
+
+      return existingCertificate;
+    }
+
+    const certificate: Certificate = {
+      id: `cert-${Date.now()}`,
+      courseId: enrollment.courseId,
+      courseTitle: enrollment.courseTitle,
+      issuedAt: now(),
+      certificateNumber: `IMP-${Date.now()}`,
+      templateId: 'certificate-template.png',
+      verified: true,
+    };
+
+    trainee.certificates.push(certificate);
+
+    enrollment.certificateId = certificate.id;
+
+    trainee.updatedAt = now();
+
+    await persist();
+
+    return certificate;
+  }
+
+  async updateAttendance(
+    id: string,
+    enrollmentId: string,
+    status: 'not-marked' | 'present' | 'absent',
+  ) {
+    await ensureHydrated();
+    const trainee = trainees.find((item) => item.id === id);
     if (!trainee) throw new Error('Trainee not found');
-    const enrollment = trainee.enrollments.find(item => item.id === enrollmentId || item.courseId === enrollmentId);
+    const enrollment = trainee.enrollments.find(
+      (item) => item.id === enrollmentId || item.courseId === enrollmentId,
+    );
     if (!enrollment) throw new Error('Enrollment not found');
     enrollment.attendance = status;
+    trainee.updatedAt = now();
+    await persist();
+    return enrollment;
+  }
+
+  async ensureAttendanceDays(id: string, enrollmentId: string) {
+    await ensureHydrated();
+    const trainee = trainees.find((item) => item.id === id);
+    if (!trainee) throw new Error('Trainee not found');
+    const enrollment = trainee.enrollments.find(
+      (item) => item.id === enrollmentId || item.courseId === enrollmentId,
+    );
+    if (!enrollment) throw new Error('Enrollment not found');
+    if (!enrollment.attendanceDays || enrollment.attendanceDays.length !== 3) {
+      enrollment.attendanceDays = await this.buildAttendanceDays(enrollment.scheduleId);
+      await persist();
+    }
+    return enrollment;
+  }
+
+  async updateAttendanceDay(
+    id: string,
+    enrollmentId: string,
+    dayIndex: number,
+    status: 'not-marked' | 'present' | 'absent',
+  ) {
+    const enrollment = await this.ensureAttendanceDays(id, enrollmentId);
+    const trainee = trainees.find((item) => item.id === id)!;
+    if (!enrollment.attendanceDays || !enrollment.attendanceDays[dayIndex]) {
+      throw new Error('Attendance day not found');
+    }
+    enrollment.attendanceDays = enrollment.attendanceDays.map((day, index) =>
+      index === dayIndex ? { ...day, status, markedAt: status === 'not-marked' ? undefined : now() } : day,
+    );
+    const marked = enrollment.attendanceDays.filter((day) => day.status !== 'not-marked');
+    enrollment.attendance = marked.length === 3 && enrollment.attendanceDays.every((day) => day.status === 'present')
+      ? 'present'
+      : marked.some((day) => day.status === 'absent')
+        ? 'absent'
+        : 'not-marked';
     trainee.updatedAt = now();
     await persist();
     return enrollment;

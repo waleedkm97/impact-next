@@ -1,24 +1,50 @@
 export type GroupType = 'corporate' | 'public';
 export type GroupStatus = 'draft' | 'active' | 'completed' | 'cancelled';
 
+export interface AssessmentOpening {
+  enabled: boolean;
+  openAt?: Date;
+  closeAt?: Date;
+}
+
+export interface GroupAssessmentSettings {
+  pre: AssessmentOpening;
+  post: AssessmentOpening;
+  evaluation: AssessmentOpening;
+}
+
 export interface TrainingGroup {
   id: string;
   name: string;
   type: GroupType;
   status: GroupStatus;
+
   courseId: string;
   courseTitle: string;
+
   scheduleId?: string;
+
   corporateDate?: string;
-corporateDelivery?: 'حضوري' | 'أونلاين';
-corporateLocation?: string;
+  corporateDelivery?: 'حضوري' | 'أونلاين';
+  corporateLocation?: string;
+
   companyName?: string;
   responsibleName?: string;
   responsibleEmail?: string;
   responsiblePhone?: string;
+
   traineeIds: string[];
+
   maxParticipants?: number;
   notes?: string;
+
+  /**
+   * التحكم في فتح التقييمات لهذه المجموعة.
+   * التقييم نفسه والأسئلة محفوظة على مستوى الدورة،
+   * بينما وقت فتح التقييم يحدد على مستوى المجموعة.
+   */
+  assessmentSettings?: GroupAssessmentSettings;
+
   createdAt: Date;
   updatedAt: Date;
 }

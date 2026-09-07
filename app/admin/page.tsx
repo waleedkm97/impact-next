@@ -1,62 +1,1116 @@
 'use client';
-import Link from 'next/link';
+
 import { useEffect, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
+import { groupRepository } from '@/lib/data/repositories/group-repository';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
-import { orderRepository } from '@/lib/data/repositories/order-repository';
-import { categoryRepository } from '@/lib/data/repositories/category-repository';
-export default function AdminDashboard() {
-    const [stats, setStats] = useState({ recorded: 0, training: 0, trainees: 0, orders: 0, revenue: 0, categories: 0 });
-    const [recent, setRecent] = useState<any[]>([]);
-    useEffect(() => {
-        async function load() {
-            const [recorded, training, trainees, orders, categories] = await Promise.all([
-                courseRepository.findByType('recorded'),
-                courseRepository.findByType('training'),
-                traineeRepository.findAll(),
-                orderRepository.findAll(),
-                categoryRepository.findAll(),
-            ]);
-            const revenue = orders.filter((o: any) => o.payment?.status === 'paid').reduce((sum: number, o: any) => sum + Number(o.total || 0), 0);
-            setStats({ recorded: recorded.length, training: training.length, trainees: trainees.length, orders: orders.length, revenue, categories: categories.length });
-            setRecent(orders.slice(0, 5));
-        }
-        void load();
-    }, []);
-    return (<main className="admin-page" dir="rtl">
-      <header className="admin-page-header">
-        <div><div className="eyebrow">Admin</div><h1>لوحة التحكم</h1><p>نظرة عامة على الدورات والبرامج والمتدربين والطلبات.</p></div>
-        <div className="admin-actions">
-          <Link className="admin-btn admin-btn-primary" href="/admin/courses">+ إضافة دورة مسجلة</Link>
-          <Link className="admin-btn admin-btn-gold" href="/admin/programs">+ إضافة برنامج تدريبي</Link>
-        </div>
-      </header>
+import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
+import type { Course } from '@/types/course';
+import type { TrainingGroup } from '@/types/group';
+import type { Trainee } from '@/types/trainee';
+import type { Schedule } from '@/types/schedule';
 
-      <section className="admin-stats">
-        <div className="admin-stat"><div className="admin-stat-label">الدورات المسجلة</div><div className="admin-stat-value">{stats.recorded}</div></div>
-        <div className="admin-stat"><div className="admin-stat-label">البرامج التدريبية</div><div className="admin-stat-value">{stats.training}</div></div>
-        <div className="admin-stat"><div className="admin-stat-label">المتدربون</div><div className="admin-stat-value">{stats.trainees}</div></div>
-        <div className="admin-stat"><div className="admin-stat-label">إجمالي الطلبات</div><div className="admin-stat-value">{stats.orders}</div></div>
-      </section>
+type AssessmentKey = 'pre' | 'post' | 'evaluation';
+
+const DEFAULT_ASSESSMENT_SETTINGS: NonNullable<
+  TrainingGroup['assessmentSettings']
+> = {
+  pre: {
+    enabled: true,
+  },
+  post: {
+    enabled: false,
+  },
+  evaluation: {
+    enabled: false,
+  },
+};
+
+function getAssessmentLabel(type: AssessmentKey) {
+  if (type === 'pre') {
+    return 'Pre Assessment';
+  }
+
+  if (type === 'post') {
+    return 'Post Assessment';
+  }
+
+  return 'Course Evaluation';
+}
+
+export default function GroupsPage() {
+  const [groups, setGroups] = useState<TrainingGroup[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [trainees, setTrainees] = useState<Trainee[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+
+  const [selectedId, setSelectedId] = useState('');
+  const [memberId, setMemberId] = useState('');
+
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] =
+    useState<string | null>(null);
+
+  const [savingAssessment, setSavingAssessment] =
+    useState<AssessmentKey | null>(null);
+
+  const [form, setForm] = useState({
+    name: '',
+    courseId: '',
+    companyName: '',
+    responsibleName: '',
+    responsibleEmail: '',
+    responsiblePhone: '',
+    scheduleId: '',
+    notes: '',
+  });
+
+  async function load() {
+    const [
+      groupList,
+      courseList,
+      traineeList,
+      scheduleList,
+    ] = await Promise.all([
+      groupRepository.findAll(),
+      courseRepository.findAll(),
+      traineeRepository.findAll(),
+      scheduleRepository.findAll({
+        filter: { published: true },
+        sort: 'startDate',
+        order: 'asc',
+      }),
+    ]);
+
+    setGroups(groupList);
+    setCourses(
+      courseList.filter(
+        (course) => course.type === 'training',
+      ),
+    );
+    setTrainees(traineeList);
+    setSchedules(scheduleList);
+
+    if (!selectedId && groupList[0]) {
+      setSelectedId(groupList[0].id);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function createGroup(
+    event: React.FormEvent,
+  ) {
+    event.preventDefault();
+
+    const course = courses.find(
+      (item) => item.id === form.courseId,
+    );
+
+    if (!course) {
+      alert('اختر الدورة.');
+      return;
+    }
+
+    const group = await groupRepository.create({
+      name:
+        form.name.trim() ||
+        form.companyName.trim() ||
+        `مجموعة ${course.title}`,
+      type: 'corporate',
+      status: 'active',
+      courseId: course.id,
+      courseTitle: course.title,
+      scheduleId:
+        form.scheduleId || undefined,
+      companyName:
+        form.companyName.trim() || undefined,
+      responsibleName:
+        form.responsibleName.trim() || undefined,
+      responsibleEmail:
+        form.responsibleEmail.trim() || undefined,
+      responsiblePhone:
+        form.responsiblePhone.trim() || undefined,
+      traineeIds: [],
+      notes: form.notes.trim() || undefined,
+
+      assessmentSettings: {
+        pre: {
+          enabled: true,
+        },
+        post: {
+          enabled: false,
+        },
+        evaluation: {
+          enabled: false,
+        },
+      },
+    });
+
+    setSelectedId(group.id);
+    setOpen(false);
+
+    resetForm();
+
+    await load();
+  }
+
+  async function updateGroup(
+    event: React.FormEvent,
+  ) {
+    event.preventDefault();
+
+    if (!editingId) {
+      return;
+    }
+
+    const course = courses.find(
+      (item) => item.id === form.courseId,
+    );
+
+    if (!course) {
+      alert('اختر الدورة.');
+      return;
+    }
+
+    await groupRepository.update(editingId, {
+      name:
+        form.name.trim() ||
+        form.companyName.trim() ||
+        `مجموعة ${course.title}`,
+      courseId: course.id,
+      courseTitle: course.title,
+      scheduleId:
+        form.scheduleId || undefined,
+      companyName:
+        form.companyName.trim() || undefined,
+      responsibleName:
+        form.responsibleName.trim() || undefined,
+      responsibleEmail:
+        form.responsibleEmail.trim() || undefined,
+      responsiblePhone:
+        form.responsiblePhone.trim() || undefined,
+      notes: form.notes.trim() || undefined,
+    });
+
+    setOpen(false);
+    setEditingId(null);
+
+    resetForm();
+
+    await load();
+  }
+
+  function resetForm() {
+    setForm({
+      name: '',
+      courseId: '',
+      companyName: '',
+      responsibleName: '',
+      responsibleEmail: '',
+      responsiblePhone: '',
+      scheduleId: '',
+      notes: '',
+    });
+  }
+
+  function startEdit() {
+    if (!selected) {
+      return;
+    }
+
+    setEditingId(selected.id);
+
+    setForm({
+      name: selected.name || '',
+      courseId: selected.courseId || '',
+      companyName:
+        selected.companyName || '',
+      responsibleName:
+        selected.responsibleName || '',
+      responsibleEmail:
+        selected.responsibleEmail || '',
+      responsiblePhone:
+        selected.responsiblePhone || '',
+      scheduleId:
+        selected.scheduleId || '',
+      notes: selected.notes || '',
+    });
+
+    setOpen(true);
+  }
+
+  async function deleteSelected() {
+    if (!selected) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف مجموعة "${
+        selected.companyName || selected.name
+      }"؟`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    await groupRepository.delete(selected.id);
+
+    setSelectedId('');
+
+    await load();
+  }
+
+  async function addMember() {
+    if (!selectedId || !memberId) {
+      return;
+    }
+
+    try {
+      await groupRepository.addTrainee(
+        selectedId,
+        memberId,
+      );
+
+      setMemberId('');
+
+      await load();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر إضافة المتدرب.',
+      );
+    }
+  }
+
+  async function removeMember(
+    traineeId: string,
+  ) {
+    if (!selectedId) {
+      return;
+    }
+
+    await groupRepository.removeTrainee(
+      selectedId,
+      traineeId,
+    );
+
+    await load();
+  }
+
+  function getSettings() {
+    if (!selected?.assessmentSettings) {
+      return DEFAULT_ASSESSMENT_SETTINGS;
+    }
+
+    return selected.assessmentSettings;
+  }
+
+  async function toggleAssessment(
+    type: AssessmentKey,
+  ) {
+    if (!selected) {
+      return;
+    }
+
+    setSavingAssessment(type);
+
+    try {
+      const current = getSettings();
+
+      const next = {
+        pre: {
+          ...current.pre,
+        },
+        post: {
+          ...current.post,
+        },
+        evaluation: {
+          ...current.evaluation,
+        },
+      };
+
+      if (type === 'pre') {
+        // Pre Assessment مفتوح دائمًا
+        next.pre = {
+          ...next.pre,
+          enabled: true,
+        };
+      } else {
+        next[type] = {
+          ...next[type],
+          enabled: !next[type].enabled,
+        };
+      }
+
+      const updated =
+        await groupRepository.updateAssessmentSettings(
+          selected.id,
+          next,
+        );
+
+      setGroups((currentGroups) =>
+        currentGroups.map((group) =>
+          group.id === updated.id
+            ? updated
+            : group,
+        ),
+      );
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر تحديث إعدادات التقييم.',
+      );
+    } finally {
+      setSavingAssessment(null);
+    }
+  }
+
+  const selected =
+    groups.find(
+      (group) => group.id === selectedId,
+    ) ?? null;
+
+  const members = selected
+    ? trainees.filter((trainee) =>
+        selected.traineeIds.includes(
+          trainee.id,
+        ),
+      )
+    : [];
+
+  const assessmentSettings =
+    selected?.assessmentSettings ??
+    DEFAULT_ASSESSMENT_SETTINGS;
+
+  return (
+    <main className="admin-page" dir="rtl">
+      <header className="admin-page-header">
+        <div>
+          <div className="eyebrow">Admin</div>
+
+          <h1>المجموعات والشركات</h1>
+
+          <p>
+            نتعامل مع كل شركة كمجموعة مرتبطة
+            بدورة، ثم نضيف موظفيها إلى المجموعة.
+          </p>
+        </div>
+
+        <button
+          className="admin-btn admin-btn-primary"
+          onClick={() => {
+            setEditingId(null);
+            resetForm();
+            setOpen(true);
+          }}
+        >
+          + إضافة مجموعة شركة
+        </button>
+      </header>
 
       <div className="admin-dashboard-grid">
         <section className="admin-card">
-          <div className="admin-modal-header"><h2>أحدث الطلبات</h2><Link href="/admin/orders" className="admin-btn admin-btn-light">عرض الكل</Link></div>
+          <div className="admin-modal-header">
+            <h2>المجموعات</h2>
+          </div>
+
           <div className="admin-list">
-            {recent.length === 0 ? <div className="admin-empty">لا توجد طلبات.</div> : recent.map((o: any) => <div className="admin-list-row" key={o.id}><div><strong>{o.customer?.name || 'عميل'}</strong><br /><span>{o.items?.[0]?.title || 'طلب'}</span></div><div><strong>{Number(o.total || 0).toLocaleString('ar-SA')} SAR</strong><br /><span>{o.status}</span></div></div>)}
+            {groups.length === 0 ? (
+              <div className="admin-empty">
+                لا توجد مجموعات حتى الآن.
+              </div>
+            ) : (
+              groups.map((group) => (
+                <button
+                  key={group.id}
+                  className="admin-list-row"
+                  style={{
+                    textAlign: 'right',
+                    border:
+                      group.id === selectedId
+                        ? '2px solid var(--admin-gold)'
+                        : undefined,
+                  }}
+                  onClick={() =>
+                    setSelectedId(group.id)
+                  }
+                >
+                  <strong>
+                    {group.companyName ||
+                      group.name}
+                  </strong>
+
+                  <span>
+                    {group.traineeIds.length}{' '}
+                    متدرب · {group.courseTitle}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </section>
-        <aside className="admin-card">
-          <div className="admin-modal-header"><h2>اختصارات</h2></div>
-          <div className="admin-quick-grid">
-            <Link className="admin-quick" href="/admin/categories">الفئات<br /><small>{stats.categories} فئات</small></Link>
-            <Link className="admin-quick" href="/admin/students">المتدربون<br /><small>{stats.trainees} حساب</small></Link>
-            <Link className="admin-quick" href="/admin/coupons">الكوبونات</Link>
-            <Link className="admin-quick" href="/admin/settings">الإعدادات</Link>
-          </div>
-          <div style={{ padding: '0 14px 18px', color: '#6b7890', fontSize: 12 }}>الإيرادات المدفوعة: <strong style={{ color: '#002060' }}>{stats.revenue.toLocaleString('ar-SA')} SAR</strong></div>
-        </aside>
-      </div>
-    </main>);
-}
 
+        <section className="admin-card">
+          <div className="admin-modal-header">
+            <div>
+              <h2>
+                {selected?.companyName ||
+                  selected?.name ||
+                  'اختر مجموعة'}
+              </h2>
+
+              {selected && (
+                <p>{selected.courseTitle}</p>
+              )}
+            </div>
+
+            {selected && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                }}
+              >
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-light"
+                  onClick={startEdit}
+                >
+                  تعديل
+                </button>
+
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-danger"
+                  onClick={() =>
+                    void deleteSelected()
+                  }
+                >
+                  حذف
+                </button>
+              </div>
+            )}
+          </div>
+
+          {selected ? (
+            <div className="admin-modal-body">
+              <div
+                className="admin-meta"
+                style={{ marginBottom: 18 }}
+              >
+                <span className="admin-tag">
+                  {selected.responsibleName ||
+                    'بدون مسؤول'}
+                </span>
+
+                <span className="admin-tag">
+                  {selected.traineeIds.length}{' '}
+                  متدرب
+                </span>
+              </div>
+
+              {/* ========================= */}
+              {/* Assessment Controls */}
+              {/* ========================= */}
+
+              <div
+                className="admin-card"
+                style={{
+                  marginBottom: 20,
+                  padding: 18,
+                }}
+              >
+                <div
+                  style={{
+                    marginBottom: 14,
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: 0,
+                      fontSize: 18,
+                    }}
+                  >
+                    إعدادات التقييمات
+                  </h3>
+
+                  <p
+                    style={{
+                      marginTop: 6,
+                      opacity: 0.75,
+                    }}
+                  >
+                    التحكم في إتاحة التقييمات
+                    لهذه المجموعة.
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 10,
+                  }}
+                >
+                  {/* PRE */}
+
+                  <div
+                    className="admin-list-row"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent:
+                        'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <strong>
+                        {getAssessmentLabel(
+                          'pre',
+                        )}
+                      </strong>
+
+                      <span>
+                        متاح للمتدرب من البداية
+                      </span>
+                    </div>
+
+                    <span className="admin-tag">
+                      مفتوح دائمًا
+                    </span>
+                  </div>
+
+                  {/* POST */}
+
+                  <div
+                    className="admin-list-row"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent:
+                        'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <strong>
+                        {getAssessmentLabel(
+                          'post',
+                        )}
+                      </strong>
+
+                      <span>
+                        يفتح من الإدارة بعد
+                        انتهاء البرنامج
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={
+                        assessmentSettings.post
+                          .enabled
+                          ? 'admin-btn admin-btn-primary'
+                          : 'admin-btn admin-btn-light'
+                      }
+                      disabled={
+                        savingAssessment ===
+                        'post'
+                      }
+                      onClick={() =>
+                        void toggleAssessment(
+                          'post',
+                        )
+                      }
+                    >
+                      {savingAssessment ===
+                      'post'
+                        ? 'جارٍ الحفظ...'
+                        : assessmentSettings.post
+                              .enabled
+                          ? 'مفتوح'
+                          : 'مغلق'}
+                    </button>
+                  </div>
+
+                  {/* EVALUATION */}
+
+                  <div
+                    className="admin-list-row"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent:
+                        'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <strong>
+                        {getAssessmentLabel(
+                          'evaluation',
+                        )}
+                      </strong>
+
+                      <span>
+                        تقييم الدورة والمدرب
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={
+                        assessmentSettings
+                          .evaluation.enabled
+                          ? 'admin-btn admin-btn-primary'
+                          : 'admin-btn admin-btn-light'
+                      }
+                      disabled={
+                        savingAssessment ===
+                        'evaluation'
+                      }
+                      onClick={() =>
+                        void toggleAssessment(
+                          'evaluation',
+                        )
+                      }
+                    >
+                      {savingAssessment ===
+                      'evaluation'
+                        ? 'جارٍ الحفظ...'
+                        : assessmentSettings
+                              .evaluation
+                              .enabled
+                          ? 'مفتوح'
+                          : 'مغلق'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* ========================= */}
+              {/* Add Member */}
+              {/* ========================= */}
+
+              <div
+                className="admin-form-grid"
+                style={{ marginBottom: 18 }}
+              >
+                <select
+                  className="admin-select"
+                  value={memberId}
+                  onChange={(event) =>
+                    setMemberId(
+                      event.target.value,
+                    )
+                  }
+                >
+                  <option value="">
+                    اختر متدربًا لإضافته
+                  </option>
+
+                  {trainees
+                    .filter(
+                      (trainee) =>
+                        !selected.traineeIds.includes(
+                          trainee.id,
+                        ),
+                    )
+                    .map((trainee) => (
+                      <option
+                        key={trainee.id}
+                        value={trainee.id}
+                      >
+                        {
+                          trainee.profile
+                            .firstName
+                        }{' '}
+                        {
+                          trainee.profile
+                            .lastName
+                        }{' '}
+                        — {trainee.email}
+                      </option>
+                    ))}
+                </select>
+
+                <button
+                  className="admin-btn admin-btn-primary"
+                  onClick={() =>
+                    void addMember()
+                  }
+                >
+                  إضافة للمجموعة
+                </button>
+              </div>
+
+              {/* ========================= */}
+              {/* Members */}
+              {/* ========================= */}
+
+              <div className="admin-list">
+                {members.length === 0 ? (
+                  <div className="admin-empty">
+                    لم تتم إضافة متدربين لهذه
+                    المجموعة.
+                  </div>
+                ) : (
+                  members.map((trainee) => (
+                    <div
+                      className="admin-list-row"
+                      key={trainee.id}
+                    >
+                      <div>
+                        <strong>
+                          {
+                            trainee.profile
+                              .firstName
+                          }{' '}
+                          {
+                            trainee.profile
+                              .lastName
+                          }
+                        </strong>
+
+                        <span>
+                          {trainee.email}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-light"
+                          onClick={() => {
+                            const enrollment =
+                              trainee.enrollments.find(
+                                (item) =>
+                                  item.groupId ===
+                                  selected.id,
+                              );
+
+                            if (
+                              enrollment
+                            ) {
+                              void traineeRepository
+                                .updateAttendance(
+                                  trainee.id,
+                                  enrollment.id ??
+                                    enrollment.courseId,
+                                  'present',
+                                )
+                                .then(load);
+                            }
+                          }}
+                        >
+                          حاضر
+                        </button>
+
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-light"
+                          onClick={() => {
+                            const enrollment =
+                              trainee.enrollments.find(
+                                (item) =>
+                                  item.groupId ===
+                                  selected.id,
+                              );
+
+                            if (
+                              enrollment
+                            ) {
+                              void traineeRepository
+                                .updateAttendance(
+                                  trainee.id,
+                                  enrollment.id ??
+                                    enrollment.courseId,
+                                  'absent',
+                                )
+                                .then(load);
+                            }
+                          }}
+                        >
+                          غائب
+                        </button>
+
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-danger"
+                          onClick={() =>
+                            void removeMember(
+                              trainee.id,
+                            )
+                          }
+                        >
+                          إزالة
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="admin-empty">
+              اختر مجموعة لعرض المتدربين.
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* ========================= */}
+      {/* Group Modal */}
+      {/* ========================= */}
+
+      {open && (
+        <div className="admin-modal-backdrop">
+          <form
+            className="admin-modal"
+            style={{ maxWidth: 760 }}
+            onSubmit={
+              editingId
+                ? updateGroup
+                : createGroup
+            }
+          >
+            <div className="admin-modal-header">
+              <h2>
+                {editingId
+                  ? 'تعديل مجموعة شركة'
+                  : 'إضافة مجموعة شركة'}
+              </h2>
+
+              <button
+                type="button"
+                className="admin-modal-close"
+                onClick={() => {
+                  setOpen(false);
+                  setEditingId(null);
+                  resetForm();
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="admin-modal-body">
+              <div className="admin-form-grid">
+                <div className="admin-field">
+                  <label>
+                    اسم المجموعة
+                  </label>
+
+                  <input
+                    className="admin-input"
+                    value={form.name}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        name: event.target.value,
+                      })
+                    }
+                    placeholder="يُستخدم اسم الشركة تلقائيًا إذا تركته فارغًا"
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label>الدورة</label>
+
+                  <select
+                    className="admin-select"
+                    required
+                    value={form.courseId}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        courseId:
+                          event.target.value,
+                      })
+                    }
+                  >
+                    <option value="">
+                      اختر الدورة
+                    </option>
+
+                    {courses.map((course) => (
+                      <option
+                        key={course.id}
+                        value={course.id}
+                      >
+                        {course.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="admin-field">
+                  <label>الموعد</label>
+
+                  <select
+                    className="admin-select"
+                    value={form.scheduleId}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        scheduleId:
+                          event.target.value,
+                      })
+                    }
+                  >
+                    <option value="">
+                      بدون موعد محدد
+                    </option>
+
+                    {schedules
+                      .filter(
+                        (schedule) =>
+                          schedule.courseId ===
+                          form.courseId,
+                      )
+                      .map((schedule) => (
+                        <option
+                          key={schedule.id}
+                          value={schedule.id}
+                        >
+                          {schedule.startDate.toLocaleDateString(
+                            'ar-SA',
+                          )}{' '}
+                          —{' '}
+                          {schedule.city ||
+                            'أونلاين'}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="admin-field">
+                  <label>اسم الشركة</label>
+
+                  <input
+                    className="admin-input"
+                    required
+                    value={form.companyName}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        companyName:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label>
+                    اسم المسؤول
+                  </label>
+
+                  <input
+                    className="admin-input"
+                    value={form.responsibleName}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        responsibleName:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label>
+                    بريد المسؤول
+                  </label>
+
+                  <input
+                    className="admin-input"
+                    type="email"
+                    value={form.responsibleEmail}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        responsibleEmail:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label>
+                    جوال المسؤول
+                  </label>
+
+                  <input
+                    className="admin-input"
+                    value={form.responsiblePhone}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        responsiblePhone:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div
+                className="admin-field"
+                style={{ marginTop: 14 }}
+              >
+                <label>ملاحظات</label>
+
+                <textarea
+                  className="admin-textarea"
+                  rows={4}
+                  value={form.notes}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      notes: event.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="admin-modal-footer">
+              <button
+                type="button"
+                className="admin-btn admin-btn-light"
+                onClick={() => {
+                  setOpen(false);
+                  setEditingId(null);
+                  resetForm();
+                }}
+              >
+                إلغاء
+              </button>
+
+              <button className="admin-btn admin-btn-primary">
+                {editingId
+                  ? 'حفظ التعديلات'
+                  : 'حفظ المجموعة'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </main>
+  );
+}
