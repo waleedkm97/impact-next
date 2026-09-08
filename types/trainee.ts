@@ -53,48 +53,33 @@ export interface AttendanceDay {
 
 export interface CourseEnrollment {
   id?: string;
-
   courseId: string;
   courseTitle: string;
-
   enrolledAt: Date;
-
   scheduleId?: string;
   groupId?: string;
-
   completedAt?: Date;
-
   status: 'active' | 'completed' | 'dropped' | 'expired';
-
   progress: number;
-
   lastAccessedAt?: Date;
-
   certificateId?: string;
 
-  /*
-   * حالة التقييمات
-   */
   preAssessment?: AssessmentState;
   postAssessment?: AssessmentState;
   courseEvaluation?: AssessmentState;
 
-  /*
-   * نتائج التقييمات
-   */
   preAssessmentScore?: number;
   postAssessmentScore?: number;
+  courseEvaluationScore?: number;
 
-  /*
-   * تواريخ إكمال التقييمات
-   */
+  preAssessmentAnswers?: Record<string, string>;
+  postAssessmentAnswers?: Record<string, string>;
+  courseEvaluationAnswers?: Record<string, string>;
+
   preAssessmentCompletedAt?: Date;
   postAssessmentCompletedAt?: Date;
   courseEvaluationCompletedAt?: Date;
 
-  /*
-   * الحضور
-   */
   attendance?: AttendanceStatus;
   attendanceDays?: AttendanceDay[];
   attendanceMode?: 'in-person' | 'online';
