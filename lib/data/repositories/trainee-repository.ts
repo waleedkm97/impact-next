@@ -26,6 +26,82 @@ function date(value: unknown, fallback = new Date()) {
   return Number.isNaN(result.getTime()) ? fallback : result;
 }
 
+
+function createEntityId(prefix: string) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getNextCertificateNumber() {
+  const year = new Date().getFullYear();
+  const yearShort = String(year).slice(-2);
+  const pattern = new RegExp(`^IMP-${yearShort}-(\\d{3})$`);
+  let maxSequence = 0;
+
+  for (const trainee of trainees) {
+    for (const certificate of trainee.certificates ?? []) {
+      const match = certificate.certificateNumber?.match(pattern);
+      if (match) {
+        maxSequence = Math.max(maxSequence, Number(match[1]));
+      }
+    }
+  }
+
+  return `IMP-${yearShort}-${String(maxSequence + 1).padStart(3, '0')}`;
+}
+
+function migrateCertificateNumbers() {
+  const year = new Date().getFullYear();
+  const yearShort = String(year).slice(-2);
+  const currentPattern = new RegExp(`^IMP-${yearShort}-\\d{3}$`);
+  const legacyPattern = /^IMP-\d{10,}$/;
+  const used = new Set<string>();
+  let maxSequence = 0;
+
+  for (const trainee of trainees) {
+    for (const certificate of trainee.certificates ?? []) {
+      const number = certificate.certificateNumber ?? '';
+      const match = number.match(currentPattern);
+
+      if (match) {
+        used.add(number);
+        maxSequence = Math.max(maxSequence, Number(match[0].slice(-6)));
+      }
+    }
+  }
+
+  let changed = false;
+
+  for (const trainee of trainees) {
+    for (const certificate of trainee.certificates ?? []) {
+      const number = certificate.certificateNumber ?? '';
+
+      if (!legacyPattern.test(number) && currentPattern.test(number)) {
+        continue;
+      }
+
+      if (!number) {
+        // Fall through and assign a new number.
+      }
+
+      let nextNumber = '';
+      do {
+        maxSequence += 1;
+        nextNumber = `IMP-${yearShort}-${String(maxSequence).padStart(3, '0')}`;
+      } while (used.has(nextNumber));
+
+      certificate.certificateNumber = nextNumber;
+      used.add(nextNumber);
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 function getSessionIdFromCookie() {
   if (typeof document === 'undefined') {
     return null;
@@ -107,6 +183,9 @@ async function ensureHydrated() {
 
       if (saved !== null) {
         trainees = saved.map(normalizeTrainee);
+        if (migrateCertificateNumbers()) {
+          await persist();
+        }
       }
 
       hydrated = true;
@@ -613,11 +692,11 @@ enrollment.courseEvaluation = 'locked';
     }
 
     const certificate: Certificate = {
-      id: `cert-${Date.now()}`,
+      id: createEntityId('cert'),
       courseId: enrollment.courseId,
       courseTitle: enrollment.courseTitle,
       issuedAt: now(),
-      certificateNumber: `IMP-${Date.now()}`,
+      certificateNumber: getNextCertificateNumber(),
       templateId: 'certificate-template.png',
       verified: true,
     };
@@ -711,11 +790,11 @@ enrollment.courseEvaluation = 'locked';
     }
 
     const certificate: Certificate = {
-      id: `cert-${Date.now()}`,
+      id: createEntityId('cert'),
       courseId,
       courseTitle,
       issuedAt: now(),
-      certificateNumber: `IMP-${Date.now()}`,
+      certificateNumber: getNextCertificateNumber(),
       templateId: 'certificate-template.png',
       verified: true,
     };

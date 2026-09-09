@@ -260,6 +260,9 @@ export default function ProgramsAdmin() {
   const [drafts, setDrafts] = useState<Drafts>(emptyDrafts());
   const [assessmentSaving, setAssessmentSaving] = useState(false);
   const [bulkQuestionsText, setBulkQuestionsText] = useState('');
+  const [assessmentSchedules, setAssessmentSchedules] = useState<Schedule[]>([]);
+  const [selectedAssessmentScheduleId, setSelectedAssessmentScheduleId] = useState('');
+  const [assessmentAccessSaving, setAssessmentAccessSaving] = useState<'post' | 'evaluation' | null>(null);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -419,7 +422,7 @@ export default function ProgramsAdmin() {
     await load();
   }
 
-  function openAssessments(course: Course) {
+  async function openAssessments(course: Course) {
     const nextDrafts = emptyDrafts();
 
     (['pre', 'post', 'evaluation'] as AssessmentType[]).forEach((type) => {
@@ -433,9 +436,43 @@ export default function ProgramsAdmin() {
 
     setAssessmentCourse(course);
     setDrafts(nextDrafts);
+    const courseSchedules = await scheduleRepository.findByCourseId(course.id);
+    setAssessmentSchedules(courseSchedules);
+    setSelectedAssessmentScheduleId(courseSchedules[0]?.id ?? '');
     setAssessmentTab('pre');
     setBulkQuestionsText('');
     setAssessmentOpen(true);
+  }
+
+  async function togglePublicScheduleAssessment(type: 'post' | 'evaluation') {
+    if (!selectedAssessmentScheduleId) {
+      alert('اختر موعدًا تدريبيًا أولًا.');
+      return;
+    }
+
+    const schedule = assessmentSchedules.find(
+      (item) => item.id === selectedAssessmentScheduleId,
+    );
+    if (!schedule) return;
+
+    const field =
+      type === 'post' ? 'postAssessmentEnabled' : 'courseEvaluationEnabled';
+    const nextValue = schedule[field] !== true;
+
+    setAssessmentAccessSaving(type);
+    try {
+      const updated = await scheduleRepository.update(schedule.id, {
+        [field]: nextValue,
+      } as Partial<Schedule>);
+
+      setAssessmentSchedules((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'تعذر تحديث إتاحة التقييم.');
+    } finally {
+      setAssessmentAccessSaving(null);
+    }
   }
 
   function updateCurrentAssessment(
@@ -846,6 +883,8 @@ export default function ProgramsAdmin() {
       allowWaitlist: true,
       requireConfirmation: false,
       recurrence: 'once',
+      postAssessmentEnabled: false,
+      courseEvaluationEnabled: false,
     };
 
     if (editingSchedule) {
@@ -1318,7 +1357,7 @@ export default function ProgramsAdmin() {
       {assessmentOpen && assessmentCourse && currentAssessment && (
         <Modal
           title={`إدارة التقييمات — ${assessmentCourse.title}`}
-          onClose={() => setAssessmentOpen(false)}
+          onClose={() => { setAssessmentOpen(false); setAssessmentSchedules([]); setSelectedAssessmentScheduleId(''); }}
           width={1100}
         >
           <div
@@ -1351,6 +1390,58 @@ export default function ProgramsAdmin() {
               },
             )}
           </div>
+
+          {assessmentCourse.trainingKind !== 'corporate' && (
+            <div
+              className="admin-card"
+              style={{ padding: 18, marginBottom: 18, background: '#f8fafc' }}
+            >
+              <h3 style={{ marginTop: 0 }}>إتاحة التقييم لمتدربي Public حسب الموعد</h3>
+              <p style={{ color: '#6b7890', marginTop: 0, fontSize: 13 }}>
+                اختر موعدًا محددًا. هذا الإعداد لا يفتح التقييم لباقي مواعيد الدورة.
+              </p>
+              <div className="admin-form-grid">
+                <Field label="الموعد التدريبي">
+                  <select
+                    className="admin-select"
+                    value={selectedAssessmentScheduleId}
+                    onChange={(event) => setSelectedAssessmentScheduleId(event.target.value)}
+                  >
+                    <option value="">اختر الموعد</option>
+                    {assessmentSchedules
+                      .slice()
+                      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+                      .map((schedule) => (
+                        <option key={schedule.id} value={schedule.id}>
+                          {formatDate(schedule.startDate)} — {schedule.city || 'Online'}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              </div>
+              {selectedAssessmentScheduleId && (
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                  {(['post', 'evaluation'] as const).map((type) => {
+                    const schedule = assessmentSchedules.find((item) => item.id === selectedAssessmentScheduleId)!;
+                    const enabled = type === 'post' ? schedule.postAssessmentEnabled === true : schedule.courseEvaluationEnabled === true;
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        className={enabled ? 'admin-btn admin-btn-primary' : 'admin-btn admin-btn-light'}
+                        disabled={assessmentAccessSaving === type}
+                        onClick={() => void togglePublicScheduleAssessment(type)}
+                      >
+                        {assessmentAccessSaving === type
+                          ? 'جارٍ الحفظ...'
+                          : `${type === 'post' ? 'التقييم البعدي' : 'تقييم الدورة'}: ${enabled ? 'مفتوح' : 'مغلق'}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           <div
             className="admin-card"
@@ -1955,10 +2046,10 @@ export default function ProgramsAdmin() {
                   />
                 </Field>
               ) : (
-                <Field label="رابط Zoom">
+                <Field label="رابط حضور الدورة أونلاين">
                   <input
                     className="admin-input"
-                    placeholder="يظهر للمشارك بعد التسجيل"
+                    placeholder="Zoom أو Microsoft Teams أو أي رابط حضور"
                     value={scheduleForm.meeting}
                     onChange={(event) =>
                       setScheduleForm({
@@ -2003,6 +2094,7 @@ export default function ProgramsAdmin() {
                   <th>التاريخ</th>
                   <th>التنفيذ</th>
                   <th>المدينة</th>
+                  <th>رابط الحضور</th>
                   <th>السعر</th>
                   <th>الإجراءات</th>
                 </tr>
@@ -2018,11 +2110,14 @@ export default function ProgramsAdmin() {
                     <tr key={schedule.id}>
                       <td>{formatDate(schedule.startDate)}</td>
                       <td>
-                        {schedule.city === 'Online'
-                          ? 'Online'
-                          : 'حضوري'}
+                        {schedule.onlineMeetingLink ? 'أونلاين' : 'حضوري'}
                       </td>
                       <td>{schedule.city || '—'}</td>
+                      <td>
+                        {schedule.onlineMeetingLink ? (
+                          <a href={schedule.onlineMeetingLink} target="_blank" rel="noopener noreferrer" className="admin-btn admin-btn-light">فتح الرابط</a>
+                        ) : '—'}
+                      </td>
                       <td>
                         {Number(schedule.price || 0).toLocaleString(
                           'ar-SA',
@@ -2051,7 +2146,7 @@ export default function ProgramsAdmin() {
                 {schedules.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       style={{
                         textAlign: 'center',
                         padding: 25,

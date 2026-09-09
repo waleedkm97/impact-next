@@ -102,6 +102,8 @@ delivery,
             assessments: [],
             audience: raw.audience,
             methodology: raw.methodology,
+            materialUrl: raw.materialUrl,
+            meetingLink: raw.meetingLink,
             image: raw.image,
             featured: Boolean(raw.featured),
             published: raw.published !== false,
@@ -122,8 +124,17 @@ let hydrated = false;
 let hydration: Promise<void> | null = null;
 async function ensureHydrated() { if (hydrated)
     return; await migrateLegacyData(); if (!hydration) {
-    hydration = (async () => { const saved = await browserDbGet<Course[]>('courses'); if (saved !== null)
-        courses = saved.map(normalizeCourse); hydrated = true; })().catch(() => { hydrated = true; });
+    hydration = (async () => { const saved = await browserDbGet<Course[]>('courses'); if (saved !== null) {
+        courses = saved.map(normalizeCourse);
+        const seeded = buildSeedCourses();
+        const existingIds = new Set(courses.map((course) => course.id));
+        const missingSeeds = seeded.filter((course) => !existingIds.has(course.id));
+        if (missingSeeds.length) {
+            courses = [...courses, ...missingSeeds];
+            await browserDbSet('courses', courses);
+        }
+    }
+    hydrated = true; })().catch(() => { hydrated = true; });
 } await hydration; }
 function normalizeCourse(c: Course): Course { return { ...c, days: c.type === 'training' ? 3 : c.days, createdAt: date(c.createdAt), updatedAt: date(c.updatedAt), lessons: (c.lessons ?? []).map(l => ({ ...l, createdAt: date(l.createdAt), updatedAt: date(l.updatedAt), questions: l.questions?.map(q => ({ ...q })) })), schedules: (c.schedules ?? []).map(s => ({ ...s, startDate: date(s.startDate), endDate: date(s.endDate), createdAt: date(s.createdAt), updatedAt: date(s.updatedAt) })), assessments: (c.assessments ?? []).map(a => ({ ...a, createdAt: date(a.createdAt), updatedAt: date(a.updatedAt) })) }; }
 async function persist() { await browserDbSet('courses', courses); }

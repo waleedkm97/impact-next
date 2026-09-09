@@ -47,6 +47,7 @@ export default function CourseLearningPage() {
   const [user, setUser] = useState<Trainee | null>(null);
   const [enrollment, setEnrollment] = useState<CourseEnrollment | null>(null);
   const [loading, setLoading] = useState(true);
+  const [attendanceSaving, setAttendanceSaving] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -73,7 +74,19 @@ export default function CourseLearningPage() {
             (item) => item.courseId === currentCourse.id,
           ) ?? null;
 
-        setEnrollment(currentEnrollment);
+        if (currentEnrollment) {
+          try {
+            const ensuredEnrollment = await traineeRepository.ensureAttendanceDays(
+              currentUser.id,
+              currentEnrollment.id ?? currentEnrollment.courseId,
+            );
+            setEnrollment({ ...ensuredEnrollment });
+          } catch {
+            setEnrollment(currentEnrollment);
+          }
+        } else {
+          setEnrollment(null);
+        }
 
         if (currentEnrollment?.scheduleId) {
           const currentSchedule = await scheduleRepository.findById(
@@ -125,6 +138,7 @@ export default function CourseLearningPage() {
   const evaluation = getAssessment(assessments, 'evaluation');
 
   const isCompleted = enrollment?.status === 'completed';
+  const isRecordedCourse = course?.type === 'recorded';
   const progress = Math.max(
     0,
     Math.min(100, Number(enrollment?.progress ?? 0)),
@@ -288,9 +302,7 @@ export default function CourseLearningPage() {
               </div>
 
               <div className="mt-2 font-semibold text-[#062b67]">
-                {schedule?.onlineMeetingLink
-                  ? 'عن بُعد'
-                  : 'حضوري'}
+                {course.delivery === 'online' ? 'أونلاين مباشر' : 'حضوري'}
               </div>
             </div>
 
@@ -335,37 +347,39 @@ export default function CourseLearningPage() {
             )}
           </div>
 
-          {/* التقدم */}
-          <div className="rounded-3xl border bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-[#062b67]">
-              تقدمك في الدورة
-            </h2>
+          {/* التقدم — يظهر فقط للدورات المسجلة */}
+          {isRecordedCourse && (
+            <div className="rounded-3xl border bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-[#062b67]">
+                تقدمك في الدورة
+              </h2>
 
-            <div className="mt-6">
-              <div className="mb-2 flex justify-between text-sm">
-                <span className="text-gray-500">
-                  نسبة الإنجاز
-                </span>
+              <div className="mt-6">
+                <div className="mb-2 flex justify-between text-sm">
+                  <span className="text-gray-500">
+                    نسبة الإنجاز
+                  </span>
 
-                <span className="font-bold text-[#062b67]">
-                  {Math.round(progress)}%
-                </span>
+                  <span className="font-bold text-[#062b67]">
+                    {Math.round(progress)}%
+                  </span>
+                </div>
+
+                <div className="h-3 overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-[#062b67] transition-all"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
               </div>
 
-              <div className="h-3 overflow-hidden rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full bg-[#062b67] transition-all"
-                  style={{ width: `${progress}%` }}
-                />
+              <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                {isCompleted
+                  ? 'تم إكمال الدورة بنجاح.'
+                  : 'أكمل متطلبات الدورة للحصول على الشهادة.'}
               </div>
             </div>
-
-            <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-              {isCompleted
-                ? 'تم إكمال الدورة بنجاح.'
-                : 'أكمل متطلبات الدورة للحصول على الشهادة.'}
-            </div>
-          </div>
+          )}
         </section>
 
         {/* أزرار الدورة */}
@@ -384,11 +398,11 @@ export default function CourseLearningPage() {
 
             {/* التحضير */}
             <Link
-              href={`/course-preparation?courseId=${encodeURIComponent(course.id)}`}
+              href={`/account/course-preparation?courseId=${encodeURIComponent(course.id)}`}
               className="group rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-lg text-[#062b67]">
-                📘
+                
               </div>
 
               <h3 className="mt-4 font-bold text-[#062b67]">
@@ -410,7 +424,7 @@ export default function CourseLearningPage() {
               }`}
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-lg text-[#062b67]">
-                📝
+                
               </div>
 
               <h3 className="mt-4 font-bold text-[#062b67]">
@@ -428,13 +442,13 @@ export default function CourseLearningPage() {
             <Link
               href={`/assessment?courseId=${encodeURIComponent(course.id)}&type=post`}
               className={`group rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm ${
-                postAssessment && isCompleted
+                postAssessment && (isRecordedCourse ? isCompleted : true)
                   ? ''
                   : 'opacity-60'
               }`}
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-lg text-[#062b67]">
-                📋
+                
               </div>
 
               <h3 className="mt-4 font-bold text-[#062b67]">
@@ -442,11 +456,11 @@ export default function CourseLearningPage() {
               </h3>
 
               <p className="mt-2 text-sm text-gray-500">
-                {!isCompleted
-                  ? 'يظهر بعد إكمال متطلبات الدورة'
-                  : postAssessment
-                    ? 'ابدأ التقييم البعدي'
-                    : 'لم تتم إضافة التقييم بعد'}
+                {postAssessment
+                  ? isRecordedCourse && !isCompleted
+                    ? 'يظهر بعد إكمال متطلبات الدورة'
+                    : 'ابدأ التقييم البعدي'
+                  : 'لم تتم إضافة التقييم بعد'}
               </p>
             </Link>
 
@@ -460,7 +474,7 @@ export default function CourseLearningPage() {
               }`}
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-lg text-[#062b67]">
-                ⭐
+                
               </div>
 
               <h3 className="mt-4 font-bold text-[#062b67]">
@@ -481,7 +495,7 @@ export default function CourseLearningPage() {
                 className="group rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
               >
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-lg">
-                  🏆
+                  
                 </div>
 
                 <h3 className="mt-4 font-bold text-[#062b67]">
@@ -497,8 +511,56 @@ export default function CourseLearningPage() {
           </div>
         </section>
 
+        {/* موارد الدورة */}
+        {(course.materialUrl || (course.delivery === 'online' && (schedule?.onlineMeetingLink || course.meetingLink))) && (
+          <section className="mt-6 rounded-3xl border bg-white p-6 shadow-sm md:p-8">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-[#062b67]">
+                موارد الدورة
+              </h2>
+              <p className="mt-2 text-sm text-gray-500">
+                الملفات والروابط الخاصة بتنفيذ الدورة.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {course.materialUrl && (
+                <a
+                  href={course.materialUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
+                >
+                  <h3 className="font-bold text-[#062b67]">
+                    المادة التدريبية
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-gray-500">
+                    فتح أو تنزيل ملف المادة التدريبية PDF.
+                  </p>
+                </a>
+              )}
+
+              {course.delivery === 'online' && (schedule?.onlineMeetingLink || course.meetingLink) && (
+                <a
+                  href={schedule?.onlineMeetingLink || course.meetingLink || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
+                >
+                  <h3 className="font-bold text-[#062b67]">
+                    رابط حضور الدورة
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-gray-500">
+                    الدخول إلى جلسة الدورة الأونلاين.
+                  </p>
+                </a>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* الحضور */}
-        <section className="mt-6 rounded-3xl border bg-white p-6 shadow-sm md:p-8">
+        {!isRecordedCourse && <section className="mt-6 rounded-3xl border bg-white p-6 shadow-sm md:p-8">
 
           <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
@@ -522,45 +584,79 @@ export default function CourseLearningPage() {
           <div className="grid gap-4 md:grid-cols-3">
             {[0, 1, 2].map((index) => {
               const day = attendanceDays[index];
-
-              const status =
-                day?.status === 'present'
+              const status = day?.status ?? 'not-marked';
+              const statusLabel =
+                status === 'present'
                   ? 'حاضر'
-                  : day?.status === 'absent'
+                  : status === 'absent'
                     ? 'غائب'
                     : 'لم يتم التسجيل';
 
+              async function markAttendance(nextStatus: 'present' | 'absent') {
+                if (!user || !enrollment) return;
+                try {
+                  setAttendanceSaving(index);
+                  const updated = await traineeRepository.updateAttendanceDay(
+                    user.id,
+                    enrollment.id ?? enrollment.courseId,
+                    index,
+                    nextStatus,
+                  );
+                  setEnrollment({ ...updated });
+                } catch (error) {
+                  console.error('Failed to update attendance:', error);
+                  alert('تعذر حفظ الحضور. حاول مرة أخرى.');
+                } finally {
+                  setAttendanceSaving(null);
+                }
+              }
+
               return (
-                <div
-                  key={index}
-                  className="rounded-2xl border bg-gray-50 p-5"
-                >
-                  <div className="text-sm text-gray-500">
-                    اليوم {index + 1}
-                  </div>
-
+                <div key={index} className="rounded-2xl border bg-gray-50 p-5">
+                  <div className="text-sm text-gray-500">اليوم {index + 1}</div>
                   <div className="mt-2 font-bold text-[#062b67]">
-                    {day
-                      ? formatDate(day.date)
-                      : 'غير محدد'}
+                    {day ? formatDate(day.date) : 'غير محدد'}
                   </div>
-
-                  <div
-                    className={`mt-4 inline-flex rounded-full px-3 py-1 text-sm font-semibold ${
-                      day?.status === 'present'
-                        ? 'bg-green-50 text-green-700'
-                        : day?.status === 'absent'
-                          ? 'bg-red-50 text-red-700'
-                          : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {status}
+                  <div className={`mt-4 inline-flex rounded-full px-3 py-1 text-sm font-semibold ${
+                    status === 'present'
+                      ? 'bg-green-50 text-green-700'
+                      : status === 'absent'
+                        ? 'bg-red-50 text-red-700'
+                        : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {statusLabel}
+                  </div>
+                  <div className="mt-5 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={attendanceSaving === index}
+                      onClick={() => void markAttendance('present')}
+                      className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+                        status === 'present'
+                          ? 'border-green-600 bg-green-600 text-white'
+                          : 'border-green-200 bg-white text-green-700 hover:bg-green-50'
+                      }`}
+                    >
+                      حاضر
+                    </button>
+                    <button
+                      type="button"
+                      disabled={attendanceSaving === index}
+                      onClick={() => void markAttendance('absent')}
+                      className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+                        status === 'absent'
+                          ? 'border-red-600 bg-red-600 text-white'
+                          : 'border-red-200 bg-white text-red-700 hover:bg-red-50'
+                      }`}
+                    >
+                      غائب
+                    </button>
                   </div>
                 </div>
               );
             })}
           </div>
-        </section>
+        </section>}
 
       </div>
     </main>

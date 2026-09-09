@@ -10,6 +10,7 @@ export default function Register() {
   const [lastName, setLastName] = useState('');
   const [firstNameEnglish, setFirstNameEnglish] = useState('');
   const [lastNameEnglish, setLastNameEnglish] = useState('');
+  const [gender, setGender] = useState<'male' | 'female' | ''>('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -34,6 +35,7 @@ export default function Register() {
           lastName: lastName.trim(),
           firstNameEnglish: firstNameEnglish.trim() || undefined,
           lastNameEnglish: lastNameEnglish.trim() || undefined,
+          gender: gender || undefined,
         },
         contact: {
           email: email.trim(),
@@ -72,11 +74,20 @@ export default function Register() {
         <div className="auth-form-grid">
           <label>
             الاسم الأول
-            <input required value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+            <input
+              required
+              value={firstName}
+              onChange={(event) => setFirstName(event.target.value)}
+            />
           </label>
+
           <label>
             اسم العائلة
-            <input required value={lastName} onChange={(event) => setLastName(event.target.value)} />
+            <input
+              required
+              value={lastName}
+              onChange={(event) => setLastName(event.target.value)}
+            />
           </label>
         </div>
 
@@ -90,6 +101,7 @@ export default function Register() {
               placeholder="First Name"
             />
           </label>
+
           <label>
             اسم العائلة بالإنجليزي
             <input
@@ -100,6 +112,21 @@ export default function Register() {
             />
           </label>
         </div>
+
+        <label>
+          الجنس
+          <select
+            required
+            value={gender}
+            onChange={(event) =>
+              setGender(event.target.value as 'male' | 'female' | '')
+            }
+          >
+            <option value="">اختر الجنس</option>
+            <option value="male">ذكر</option>
+            <option value="female">أنثى</option>
+          </select>
+        </label>
 
         <label>
           البريد الإلكتروني
@@ -114,7 +141,11 @@ export default function Register() {
 
         <label>
           رقم الجوال
-          <input required value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <input
+            required
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
         </label>
 
         <label>

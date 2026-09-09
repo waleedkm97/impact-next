@@ -4,13 +4,25 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
+import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
 
 export default function Account() {
   const router = useRouter();
 
   const [user, setUser] = useState<any>(null);
   const [courses, setCourses] = useState<Record<string, any>>({});
+  const [schedules, setSchedules] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    firstName: '',
+    lastName: '',
+    firstNameEnglish: '',
+    lastNameEnglish: '',
+    phone: '',
+    gender: '' as 'male' | 'female' | '',
+  });
 
   useEffect(() => {
     let active = true;
@@ -36,6 +48,18 @@ export default function Account() {
           }),
         );
 
+        const scheduleEntries = await Promise.all(
+          currentUser.enrollments
+            .filter((enrollment) => Boolean(enrollment.scheduleId))
+            .map(async (enrollment) => {
+              const schedule = await scheduleRepository.findById(
+                enrollment.scheduleId as string,
+              );
+
+              return [enrollment.scheduleId as string, schedule] as const;
+            }),
+        );
+
         if (!active) return;
 
         const refreshedUser =
@@ -43,6 +67,7 @@ export default function Account() {
 
         setUser(refreshedUser ?? currentUser);
         setCourses(Object.fromEntries(courseEntries));
+        setSchedules(Object.fromEntries(scheduleEntries));
         setLoading(false);
       } catch (error) {
         console.error('Failed to load account:', error);
@@ -109,6 +134,54 @@ export default function Account() {
       user.profile.lastNameEnglish ?? ''
     }`.trim();
 
+  const genderText =
+    user.profile.gender === 'male'
+      ? 'ذكر'
+      : user.profile.gender === 'female'
+        ? 'أنثى'
+        : 'غير محدد';
+
+  function startEditingProfile() {
+    setProfileForm({
+      firstName: user.profile.firstName ?? '',
+      lastName: user.profile.lastName ?? '',
+      firstNameEnglish: user.profile.firstNameEnglish ?? '',
+      lastNameEnglish: user.profile.lastNameEnglish ?? '',
+      phone: user.contact?.phone ?? '',
+      gender: user.profile.gender === 'female' ? 'female' : user.profile.gender === 'male' ? 'male' : '',
+    });
+    setEditingProfile(true);
+  }
+
+
+  async function saveProfile() {
+    setSavingProfile(true);
+    try {
+      const updated = await traineeRepository.update(user.id, {
+        profile: {
+          ...user.profile,
+          firstName: profileForm.firstName.trim(),
+          lastName: profileForm.lastName.trim(),
+          firstNameEnglish: profileForm.firstNameEnglish.trim() || undefined,
+          lastNameEnglish: profileForm.lastNameEnglish.trim() || undefined,
+          gender: profileForm.gender || undefined,
+        },
+        contact: {
+          ...user.contact,
+          phone: profileForm.phone.trim() || undefined,
+        },
+      });
+
+      setUser(updated);
+      setEditingProfile(false);
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+      alert('تعذر حفظ البيانات. حاول مرة أخرى.');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
   return (
     <main
       dir="rtl"
@@ -142,63 +215,152 @@ export default function Account() {
 
         {/* بياناتي */}
         <section className="rounded-3xl border bg-white p-6 shadow-sm md:p-8">
-          <h2 className="text-xl font-bold text-[#062b67]">
-            بياناتي
-          </h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-xl font-bold text-[#062b67]">
+              بياناتي
+            </h2>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
-            <div className="rounded-2xl bg-gray-50 p-5">
-              <span className="text-sm text-gray-500">
-                الاسم بالعربي
-              </span>
-
-              <strong className="mt-2 block text-[#062b67]">
-                {arabicName || '—'}
-              </strong>
-            </div>
-
-            <div className="rounded-2xl bg-gray-50 p-5">
-              <span className="text-sm text-gray-500">
-                الاسم بالإنجليزي
-              </span>
-
-              <strong className="mt-2 block text-[#062b67]">
-                {englishName || 'غير مضاف'}
-              </strong>
-            </div>
-
-            <div className="rounded-2xl bg-gray-50 p-5">
-              <span className="text-sm text-gray-500">
-                البريد الإلكتروني
-              </span>
-
-              <strong className="mt-2 block break-all text-[#062b67]">
-                {user.email}
-              </strong>
-            </div>
-
-            <div className="rounded-2xl bg-gray-50 p-5">
-              <span className="text-sm text-gray-500">
-                رقم الجوال
-              </span>
-
-              <strong className="mt-2 block text-[#062b67]">
-                {user.contact.phone || 'غير مضاف'}
-              </strong>
-            </div>
-
-            <div className="rounded-2xl bg-gray-50 p-5">
-              <span className="text-sm text-gray-500">
-                الشركة
-              </span>
-
-              <strong className="mt-2 block text-[#062b67]">
-                {user.company?.companyName || 'غير مضاف'}
-              </strong>
-            </div>
-
+            {!editingProfile && (
+              <button
+                type="button"
+                className="rounded-xl border border-[#062b67] bg-white px-5 py-2.5 text-sm font-semibold text-[#062b67] hover:bg-gray-50"
+                onClick={startEditingProfile}
+              >
+                تعديل البيانات
+              </button>
+            )}
           </div>
+
+          {editingProfile ? (
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">الاسم بالعربي</span>
+                <input
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={profileForm.firstName}
+                  onChange={(event) =>
+                    setProfileForm({ ...profileForm, firstName: event.target.value })
+                  }
+                  required
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">اسم العائلة بالعربي</span>
+                <input
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={profileForm.lastName}
+                  onChange={(event) =>
+                    setProfileForm({ ...profileForm, lastName: event.target.value })
+                  }
+                  required
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">الاسم بالإنجليزي</span>
+                <input
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={profileForm.firstNameEnglish}
+                  onChange={(event) =>
+                    setProfileForm({ ...profileForm, firstNameEnglish: event.target.value })
+                  }
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">اسم العائلة بالإنجليزي</span>
+                <input
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={profileForm.lastNameEnglish}
+                  onChange={(event) =>
+                    setProfileForm({ ...profileForm, lastNameEnglish: event.target.value })
+                  }
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">رقم الجوال</span>
+                <input
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={profileForm.phone}
+                  onChange={(event) =>
+                    setProfileForm({ ...profileForm, phone: event.target.value })
+                  }
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">الجنس</span>
+                <select
+                  className="w-full rounded-xl border bg-white px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={profileForm.gender}
+                  onChange={(event) =>
+                    setProfileForm({
+                      ...profileForm,
+                      gender: event.target.value as 'male' | 'female' | '',
+                    })
+                  }
+                  required
+                >
+                  <option value="">اختر الجنس</option>
+                  <option value="male">ذكر</option>
+                  <option value="female">أنثى</option>
+                </select>
+              </label>
+
+              <div className="flex gap-3 sm:col-span-2">
+                <button
+                  type="button"
+                  className="rounded-xl bg-[#062b67] px-6 py-3 font-semibold text-white disabled:opacity-60"
+                  onClick={() => void saveProfile()}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? 'جاري الحفظ...' : 'حفظ البيانات'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border px-6 py-3 font-semibold text-gray-700"
+                  onClick={() => setEditingProfile(false)}
+                  disabled={savingProfile}
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-2xl bg-gray-50 p-5">
+                <span className="text-sm text-gray-500">الاسم بالعربي</span>
+                <strong className="mt-2 block text-[#062b67]">{arabicName || '—'}</strong>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 p-5">
+                <span className="text-sm text-gray-500">الاسم بالإنجليزي</span>
+                <strong className="mt-2 block text-[#062b67]">{englishName || 'غير مضاف'}</strong>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 p-5">
+                <span className="text-sm text-gray-500">الجنس</span>
+                <strong className="mt-2 block text-[#062b67]">{genderText}</strong>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 p-5">
+                <span className="text-sm text-gray-500">البريد الإلكتروني</span>
+                <strong className="mt-2 block break-all text-[#062b67]">{user.email}</strong>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 p-5">
+                <span className="text-sm text-gray-500">رقم الجوال</span>
+                <strong className="mt-2 block text-[#062b67]">{user.contact.phone || 'غير مضاف'}</strong>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 p-5">
+                <span className="text-sm text-gray-500">الشركة</span>
+                <strong className="mt-2 block text-[#062b67]">{user.company?.companyName || 'غير مضاف'}</strong>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* دوراتي */}
@@ -256,6 +418,55 @@ export default function Account() {
                 const completed =
                   enrollment.status === 'completed';
 
+                const isRecordedCourse =
+                  course?.type === 'recorded';
+
+                const schedule = enrollment.scheduleId
+                  ? schedules[enrollment.scheduleId]
+                  : null;
+
+                const formatDate = (value: unknown) => {
+                  if (!value) return '—';
+
+                  const date = new Date(value as string | Date);
+
+                  if (Number.isNaN(date.getTime())) {
+                    return '—';
+                  }
+
+                  return new Intl.DateTimeFormat('ar-SA', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric',
+                  }).format(date);
+                };
+
+                const dateText = schedule
+                  ? schedule.startDate &&
+                    schedule.endDate &&
+                    formatDate(schedule.startDate) !==
+                      formatDate(schedule.endDate)
+                    ? `${formatDate(schedule.startDate)} — ${formatDate(schedule.endDate)}`
+                    : formatDate(schedule.startDate)
+                  : 'يحدد لاحقاً';
+
+                const locationText =
+                  schedule?.location ||
+                  schedule?.city ||
+                  (course?.delivery === 'online'
+                    ? 'أونلاين مباشر'
+                    : 'يحدد لاحقاً');
+
+                const deliveryText =
+                  course?.delivery === 'online'
+                    ? 'أونلاين مباشر'
+                    : course?.delivery === 'in-person'
+                      ? 'حضوري'
+                      : course?.delivery === 'hybrid'
+                        ? 'حضوري / أونلاين'
+                        : '—';
+
+
                 return (
                   <article
                     key={
@@ -303,29 +514,66 @@ export default function Account() {
                           'برنامج تدريبي مسجل ضمن دوراتك.'}
                       </p>
 
-                      {/* Progress */}
-                      <div className="mt-6">
+                      {isRecordedCourse ? (
+                        <div className="mt-6">
+                          <div className="mb-2 flex items-center justify-between text-sm">
+                            <span className="text-gray-500">
+                              التقدم
+                            </span>
 
-                        <div className="mb-2 flex items-center justify-between text-sm">
-                          <span className="text-gray-500">
-                            التقدم
-                          </span>
+                            <strong className="text-[#062b67]">
+                              {Math.round(progress)}%
+                            </strong>
+                          </div>
 
-                          <strong className="text-[#062b67]">
-                            {Math.round(progress)}%
-                          </strong>
+                          <div className="h-3 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-[#062b67] transition-all"
+                              style={{
+                                width: `${progress}%`,
+                              }}
+                            />
+                          </div>
                         </div>
+                      ) : (
+                        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl bg-gray-50 p-4">
+                            <span className="text-xs text-gray-500">
+                              تاريخ الدورة
+                            </span>
+                            <strong className="mt-1 block text-sm text-[#062b67]">
+                              {dateText}
+                            </strong>
+                          </div>
 
-                        <div className="h-3 overflow-hidden rounded-full bg-gray-100">
-                          <div
-                            className="h-full rounded-full bg-[#062b67] transition-all"
-                            style={{
-                              width: `${progress}%`,
-                            }}
-                          />
+                          <div className="rounded-2xl bg-gray-50 p-4">
+                            <span className="text-xs text-gray-500">
+                              مكان الدورة
+                            </span>
+                            <strong className="mt-1 block text-sm text-[#062b67]">
+                              {locationText}
+                            </strong>
+                          </div>
+
+                          <div className="rounded-2xl bg-gray-50 p-4">
+                            <span className="text-xs text-gray-500">
+                              المدينة
+                            </span>
+                            <strong className="mt-1 block text-sm text-[#062b67]">
+                              {schedule?.city || '—'}
+                            </strong>
+                          </div>
+
+                          <div className="rounded-2xl bg-gray-50 p-4">
+                            <span className="text-xs text-gray-500">
+                              طريقة التدريب
+                            </span>
+                            <strong className="mt-1 block text-sm text-[#062b67]">
+                              {deliveryText}
+                            </strong>
+                          </div>
                         </div>
-
-                      </div>
+                      )}
 
                       {/* Course button */}
                       <button
@@ -340,10 +588,11 @@ export default function Account() {
                       >
                         {completed
                           ? 'عرض الدورة'
-                          : progress > 0
+                          : isRecordedCourse && progress > 0
                             ? 'متابعة الدورة'
                             : 'دخول إلى الدورة'}
                       </button>
+
 
                     </div>
 

@@ -159,7 +159,7 @@ export default function CoursePreparationPage() {
 
               <div className="rounded-2xl border p-5">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
-                  📅
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#062b67]" />
                 </div>
 
                 <h3 className="mt-4 font-bold text-[#062b67]">
@@ -174,7 +174,7 @@ export default function CoursePreparationPage() {
 
               <div className="rounded-2xl border p-5">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
-                  📚
+                  
                 </div>
 
                 <h3 className="mt-4 font-bold text-[#062b67]">

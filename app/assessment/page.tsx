@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
+import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
 import type { CourseAssessment } from '@/types/course';
 
 export default function AssessmentPage() {
@@ -23,8 +24,9 @@ export default function AssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
-  const [result, setResult] = useState<{ score?: number; passed: boolean } | null>(null);
+  const [result, setResult] = useState<{ score?: number } | null>(null);
   const [blockedReason, setBlockedReason] = useState('');
+  const [publicScheduleEnabled, setPublicScheduleEnabled] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -51,6 +53,35 @@ export default function AssessmentPage() {
         (enrollmentId && e.id === enrollmentId) || e.courseId === courseId,
       );
 
+      if (enrollment && type !== 'pre') {
+       if (enrollment.groupId) {
+  const enabled =
+    enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] === 'available' ||
+    enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] === 'completed';
+
+  setPublicScheduleEnabled(enabled);
+
+  if (
+    !enabled &&
+    enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] !== 'completed'
+  ) {
+    setBlockedReason('التقييم مغلق حاليًا من الإدارة لهذه المجموعة.');
+  }
+        } else if (enrollment.scheduleId) {
+          const schedule = await scheduleRepository.findById(enrollment.scheduleId);
+          const enabled = type === 'post'
+            ? schedule?.postAssessmentEnabled === true
+            : schedule?.courseEvaluationEnabled === true;
+          setPublicScheduleEnabled(enabled);
+          if (!enabled && enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] !== 'completed') {
+            setBlockedReason('التقييم مغلق حاليًا لهذا الموعد التدريبي.');
+          }
+        } else {
+          setPublicScheduleEnabled(false);
+          setBlockedReason('لا يوجد موعد تدريبي مرتبط بهذا التسجيل.');
+        }
+      }
+
       setLoading(false);
     }
 
@@ -68,9 +99,17 @@ export default function AssessmentPage() {
   const state = enrollment
     ? type === 'pre'
       ? enrollment.preAssessment
-      : type === 'post'
-        ? enrollment.postAssessment
-        : enrollment.courseEvaluation
+      : enrollment.groupId
+        ? type === 'post'
+          ? enrollment.postAssessment
+          : enrollment.courseEvaluation
+        : publicScheduleEnabled
+          ? type === 'post'
+            ? (enrollment.postAssessment === 'completed' ? 'completed' : 'available')
+            : (enrollment.courseEvaluation === 'completed' ? 'completed' : 'available')
+          : type === 'post'
+            ? enrollment.postAssessment
+            : enrollment.courseEvaluation
     : 'locked';
 
   if (loading) return <main dir="rtl" className="container mx-auto px-6 py-12">جاري تحميل التقييم...</main>;
@@ -78,6 +117,8 @@ export default function AssessmentPage() {
   if (!user || !enrollment) {
     return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>التقييم غير متاح</h1><Link href="/account">العودة إلى الحساب</Link></main>;
   }
+
+  
 
   if (state === 'completed') {
     return <main dir="rtl" className="container mx-auto max-w-3xl px-6 py-12"><div className="account-empty-state"><h1>{type === 'pre' ? 'التقييم القبلي' : type === 'post' ? 'التقييم البعدي' : 'تقييم الدورة'}</h1><p>تم إكمال هذا التقييم بنجاح.</p><Link className="btn-primary" href={`/course-learning?id=${encodeURIComponent(courseId)}`}>العودة إلى الدورة</Link></div></main>;
@@ -115,43 +156,22 @@ export default function AssessmentPage() {
         enrollment.id ?? courseId,
         {
           courseEvaluation: 'completed',
-          courseEvaluationScore: evaluationScore,
-          courseEvaluationAnswers: { ...answers },
           courseEvaluationCompletedAt: new Date(),
         },
       );
-      setResult({ score: evaluationScore, passed: true });
+      setResult({ score: evaluationScore });
       setSubmitted(true);
       return;
     }
 
     let earned = 0;
     let total = 0;
-
     assessment!.questions.forEach(q => {
       const points = Number(q.points ?? 1);
       total += points;
-
-      const selectedIndex = Number(answers[q.id]);
-      const selectedOption = Number.isInteger(selectedIndex)
-        ? q.options?.[selectedIndex]
-        : answers[q.id];
-
-      const correctAnswer = q.correctAnswer;
-
-      const correct = Array.isArray(correctAnswer)
-        ? correctAnswer.some((answer) => {
-            const value = String(answer);
-            return (
-              value === String(answers[q.id]) ||
-              value === String(selectedOption) ||
-              value === String(selectedIndex)
-            );
-          })
-        : String(correctAnswer) === String(answers[q.id]) ||
-          String(correctAnswer) === String(selectedOption) ||
-          String(correctAnswer) === String(selectedIndex);
-
+      const correct = Array.isArray(q.correctAnswer)
+        ? q.correctAnswer.map(String).includes(String(answers[q.id]))
+        : String(answers[q.id]) === String(q.correctAnswer);
       if (correct) earned += points;
     });
 
@@ -164,18 +184,16 @@ export default function AssessmentPage() {
         ? {
             preAssessment: 'completed',
             preAssessmentScore: score,
-            preAssessmentAnswers: { ...answers },
             preAssessmentCompletedAt: new Date(),
           }
         : {
             postAssessment: 'completed',
             postAssessmentScore: score,
-            postAssessmentAnswers: { ...answers },
             postAssessmentCompletedAt: new Date(),
           },
     );
 
-    setResult({ score, passed: true });
+    setResult({ score });
     setSubmitted(true);
   }
 

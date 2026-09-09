@@ -8,6 +8,7 @@ interface TraineeForm {
   lastName: string;
   firstNameEnglish: string;
   lastNameEnglish: string;
+  gender: 'male' | 'female' | '';
   email: string;
   phone: string;
   company: string;
@@ -19,6 +20,7 @@ const initialForm: TraineeForm = {
   lastName: '',
   firstNameEnglish: '',
   lastNameEnglish: '',
+  gender: '',
   email: '',
   phone: '',
   company: '',
@@ -105,6 +107,7 @@ export default function Students() {
       lastName: trainee.profile?.lastName ?? '',
       firstNameEnglish: trainee.profile?.firstNameEnglish ?? '',
       lastNameEnglish: trainee.profile?.lastNameEnglish ?? '',
+      gender: trainee.profile?.gender ?? '',
       email: trainee.email ?? '',
       phone: trainee.contact?.phone ?? '',
       company: trainee.company?.companyName ?? '',
@@ -118,12 +121,13 @@ export default function Students() {
     event.preventDefault();
 
     const data: any = {
-      profile: {
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
-        firstNameEnglish: form.firstNameEnglish.trim() || undefined,
-        lastNameEnglish: form.lastNameEnglish.trim() || undefined,
-      },
+     profile: {
+  firstName: form.firstName.trim(),
+  lastName: form.lastName.trim(),
+  firstNameEnglish: form.firstNameEnglish.trim() || undefined,
+  lastNameEnglish: form.lastNameEnglish.trim() || undefined,
+  gender: form.gender || undefined,
+},
 
       contact: {
         email: form.email.trim(),
@@ -349,6 +353,67 @@ export default function Students() {
                   >
                     الحضور
                   </button>{' '}
+                  {' '}
+
+<button
+                    type="button"
+                    className="admin-btn admin-btn-light"
+                    onClick={async () => {
+                      try {
+                        await traineeRepository.refresh();
+
+                        const refreshed = await traineeRepository.findById(
+                          trainee.id,
+                        );
+
+                        if (!refreshed) {
+                          alert('لم يتم العثور على حساب المتدرب.');
+                          return;
+                        }
+
+                        const enrollments = refreshed.enrollments ?? [];
+                        let certificateEnrollment: any = null;
+
+                        for (const enrollment of enrollments) {
+                          const certificate =
+                            await traineeRepository.issueCertificateIfEligible(
+                              refreshed.id,
+                              enrollment.id ?? enrollment.courseId,
+                            );
+
+                          if (certificate) {
+                            certificateEnrollment = enrollment;
+                            break;
+                          }
+                        }
+
+                        if (!certificateEnrollment) {
+                          alert(
+                            'لا توجد شهادة مستحقة لهذا المتدرب حتى الآن. تأكد من إكمال Pre-Assessment وPost-Assessment وتقييم الدورة، وإكمال التقدم إذا كانت الدورة مسجلة.',
+                          );
+                          return;
+                        }
+
+                        window.open(
+                          `/certificate?traineeId=${encodeURIComponent(
+                            refreshed.id,
+                          )}&courseId=${encodeURIComponent(
+                            certificateEnrollment.courseId,
+                          )}`,
+                          '_blank',
+                          'noopener,noreferrer',
+                        );
+                      } catch (error) {
+                        console.error(
+                          'Failed to open trainee certificate:',
+                          error,
+                        );
+                        alert('تعذر تجهيز الشهادة. حاول مرة أخرى.');
+                      }
+                    }}
+                  >
+                    الشهادة
+                  </button>
 
                   <button
                     type="button"
@@ -1034,7 +1099,25 @@ export default function Students() {
                   <label>
                     اسم العائلة بالإنجليزي
                   </label>
+<div className="admin-field">
+  <label>الجنس</label>
 
+  <select
+    className="admin-input"
+    required
+    value={form.gender}
+    onChange={(event) =>
+      setForm({
+        ...form,
+        gender: event.target.value as 'male' | 'female' | '',
+      })
+    }
+  >
+    <option value="">اختر الجنس</option>
+    <option value="male">ذكر</option>
+    <option value="female">أنثى</option>
+  </select>
+</div>
                   <input
                     className="admin-input"
                     dir="ltr"

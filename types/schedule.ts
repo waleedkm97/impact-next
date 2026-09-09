@@ -58,6 +58,8 @@ export interface Schedule {
     confirmationDeadline?: Date;
     cancellationDeadline?: Date;
     cancellationPolicy?: string;
+      postAssessmentEnabled?: boolean;
+  courseEvaluationEnabled?: boolean;
 }
 // Schedule filter and query types
 export interface ScheduleFilter {

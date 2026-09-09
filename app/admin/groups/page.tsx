@@ -152,7 +152,9 @@ export default function GroupsPage() {
     responsibleName: '',
     responsibleEmail: '',
     responsiblePhone: '',
-    scheduleId: '',
+    corporateDate: '',
+    corporateDelivery: 'حضوري' as 'حضوري' | 'أونلاين',
+    corporateLocation: '',
     notes: '',
   });
 
@@ -257,6 +259,28 @@ export default function GroupsPage() {
       )
     : undefined;
 
+  const selectedStartDate = selectedGroup?.corporateDate
+    ? new Date(`${selectedGroup.corporateDate}T00:00:00`)
+    : selectedSchedule?.startDate;
+
+  const selectedEndDate = selectedGroup?.corporateDate
+    ? (() => {
+        const date = new Date(`${selectedGroup.corporateDate}T00:00:00`);
+        date.setDate(date.getDate() + 2);
+        return date;
+      })()
+    : selectedSchedule?.endDate;
+
+  const selectedLocation =
+    selectedGroup?.corporateLocation ||
+    selectedSchedule?.city ||
+    selectedSchedule?.location ||
+    '—';
+
+  const selectedDelivery =
+    selectedGroup?.corporateDelivery ||
+    (selectedSchedule?.onlineMeetingLink ? 'أونلاين' : 'حضوري');
+
   const members = selectedGroup
     ? trainees.filter((trainee) =>
         selectedGroup.traineeIds.includes(
@@ -288,7 +312,9 @@ export default function GroupsPage() {
       responsibleName: '',
       responsibleEmail: '',
       responsiblePhone: '',
-      scheduleId: '',
+      corporateDate: '',
+      corporateDelivery: 'حضوري',
+      corporateLocation: '',
       notes: '',
     });
   }
@@ -303,7 +329,9 @@ export default function GroupsPage() {
       responsibleName: '',
       responsibleEmail: '',
       responsiblePhone: '',
-      scheduleId: '',
+      corporateDate: '',
+      corporateDelivery: 'حضوري',
+      corporateLocation: '',
       notes: '',
     });
 
@@ -326,8 +354,12 @@ export default function GroupsPage() {
         selectedGroup.responsibleEmail || '',
       responsiblePhone:
         selectedGroup.responsiblePhone || '',
-      scheduleId:
-        selectedGroup.scheduleId || '',
+      corporateDate:
+        selectedGroup.corporateDate || '',
+      corporateDelivery:
+        selectedGroup.corporateDelivery || 'حضوري',
+      corporateLocation:
+        selectedGroup.corporateLocation || '',
       notes: selectedGroup.notes || '',
     });
 
@@ -365,8 +397,16 @@ export default function GroupsPage() {
 
       courseTitle: course.title,
 
-      scheduleId:
-        form.scheduleId || undefined,
+      scheduleId: undefined,
+
+      corporateDate:
+        form.corporateDate || undefined,
+
+      corporateDelivery:
+        form.corporateDelivery,
+
+      corporateLocation:
+        form.corporateLocation.trim() || undefined,
 
       companyName:
         companyName || undefined,
@@ -443,8 +483,16 @@ export default function GroupsPage() {
 
         courseTitle: course.title,
 
-        scheduleId:
-          form.scheduleId || undefined,
+        scheduleId: undefined,
+
+        corporateDate:
+          form.corporateDate || undefined,
+
+        corporateDelivery:
+          form.corporateDelivery,
+
+        corporateLocation:
+          form.corporateLocation.trim() || undefined,
 
         companyName:
           form.companyName.trim() ||
@@ -668,464 +716,33 @@ export default function GroupsPage() {
     setReportOpen(true);
   }
 
-  function escapeReportHtml(value: unknown) {
-    return String(value ?? '—')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  function printProfessionalReport() {
+  async function printGroupCertificates() {
     if (!selectedGroup) return;
 
-    const printFrame = document.createElement('iframe');
-    printFrame.setAttribute('aria-hidden', 'true');
-    printFrame.style.position = 'fixed';
-    printFrame.style.left = '-10000px';
-    printFrame.style.top = '0';
-    printFrame.style.width = '1px';
-    printFrame.style.height = '1px';
-    printFrame.style.border = '0';
-    printFrame.style.opacity = '0';
-    document.body.appendChild(printFrame);
+    await traineeRepository.refresh();
+    const eligibleCount = members.filter((trainee) =>
+      trainee.enrollments.some(
+        (enrollment) =>
+          enrollment.courseId === selectedGroup.courseId &&
+          enrollment.groupId === selectedGroup.id &&
+          enrollment.preAssessment === 'completed' &&
+          enrollment.postAssessment === 'completed' &&
+          enrollment.courseEvaluation === 'completed',
+      ),
+    ).length;
 
-    const printDocument = printFrame.contentDocument;
-    const printWindow = printFrame.contentWindow;
-
-    if (!printDocument || !printWindow) {
-      printFrame.remove();
-      alert('تعذر تجهيز التقرير للطباعة. حاول مرة أخرى.');
+    if (eligibleCount === 0) {
+      alert('لا توجد شهادات مستحقة حاليًا لمتدربي هذه المجموعة.');
       return;
     }
 
-    const course = courses.find((item) => item.id === selectedGroup.courseId);
-    const companyName =
-      selectedGroup.companyName?.trim() ||
-      selectedCompany ||
-      selectedGroup.name ||
-      '—';
-    const courseTitle = selectedGroup.courseTitle || course?.title || '—';
-    const location =
-      selectedSchedule?.city ||
-      selectedSchedule?.location ||
-      '—';
-    const startDate = formatDateLong(selectedSchedule?.startDate);
-    const endDate = selectedSchedule?.endDate
-      ? formatDateLong(selectedSchedule.endDate)
-      : '—';
-    const responsible = selectedGroup.responsibleName || '—';
-    const generatedAt = new Date().toLocaleDateString('ar-SA', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-
-    const safe = (value: unknown) => escapeReportHtml(value);
-    const average = (values: number[]) =>
-      values.length
-        ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
-        : 0;
-
-    const enrollments = members.map((trainee) => ({
-      trainee,
-      enrollment: getEnrollment(trainee, selectedGroup),
-    }));
-
-    const preScores = enrollments
-      .map(({ enrollment }) => enrollment?.preAssessmentScore)
-      .filter((value): value is number => typeof value === 'number');
-    const postScores = enrollments
-      .map(({ enrollment }) => enrollment?.postAssessmentScore)
-      .filter((value): value is number => typeof value === 'number');
-    const evaluationScores = enrollments
-      .map(({ enrollment }) => enrollment?.courseEvaluationScore)
-      .filter((value): value is number => typeof value === 'number');
-
-    const preAverage = average(preScores);
-    const postAverage = average(postScores);
-    const evaluationAverage = average(evaluationScores);
-    const improvement = preScores.length && postScores.length
-      ? postAverage - preAverage
-      : 0;
-
-    const completedEnrollments = enrollments.filter(
-      ({ enrollment }) => enrollment?.status === 'completed',
-    ).length;
-    const preCompleted = enrollments.filter(
-      ({ enrollment }) => enrollment?.preAssessment === 'completed',
-    ).length;
-    const postCompleted = enrollments.filter(
-      ({ enrollment }) => enrollment?.postAssessment === 'completed',
-    ).length;
-    const evaluationCompleted = enrollments.filter(
-      ({ enrollment }) => enrollment?.courseEvaluation === 'completed',
-    ).length;
-
-    const attendanceMarks = enrollments.reduce((total, { enrollment }) => {
-      const days = enrollment?.attendanceDays ?? [];
-      return total + days.filter(
-        (day) => day.status === 'present' || day.status === 'absent',
-      ).length;
-    }, 0);
-    const attendancePresent = enrollments.reduce((total, { enrollment }) => {
-      const days = enrollment?.attendanceDays ?? [];
-      return total + days.filter((day) => day.status === 'present').length;
-    }, 0);
-    const attendanceRate = attendanceMarks
-      ? Math.round((attendancePresent / attendanceMarks) * 100)
-      : 0;
-
-    const dayRates = [0, 1, 2].map((dayIndex) => {
-      let marked = 0;
-      let present = 0;
-      enrollments.forEach(({ enrollment }) => {
-        const status = enrollment?.attendanceDays?.[dayIndex]?.status;
-        if (status === 'present' || status === 'absent') {
-          marked += 1;
-          if (status === 'present') present += 1;
-        }
-      });
-      return marked ? Math.round((present / marked) * 100) : 0;
-    });
-
-    const progressValues = enrollments
-      .map(({ enrollment }) => enrollment?.progress ?? 0)
-      .filter((value) => typeof value === 'number');
-    const progressAverage = average(progressValues);
-
-    const objectives = Array.isArray(course?.objectives)
-      ? course.objectives.filter(Boolean)
-      : [];
-    const outcomes = Array.isArray(course?.outcomes)
-      ? course.outcomes.filter(Boolean)
-      : [];
-    const outlineItems = course?.outline
-      ? course.outline
-          .split(/\r?\n|•|\u2022/)
-          .map((item) => item.trim())
-          .filter(Boolean)
-      : (course?.lessons ?? [])
-          .map((lesson) => lesson.title?.trim())
-          .filter((item): item is string => Boolean(item));
-
-    const listHtml = (items: string[], emptyText: string) =>
-      items.length
-        ? `<ul>${items.map((item) => `<li>${safe(item)}</li>`).join('')}</ul>`
-        : `<p class="empty">${safe(emptyText)}</p>`;
-
-    const assessmentRows = [
-      { label: 'التقييم القبلي', value: preAverage, count: preScores.length },
-      { label: 'التقييم البعدي', value: postAverage, count: postScores.length },
-      { label: 'تقييم البرنامج', value: evaluationAverage, count: evaluationScores.length },
-    ];
-
-    const assessmentChart = assessmentRows
-      .map((item) => `
-        <div class="chart-row">
-          <div class="chart-label">${safe(item.label)}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${item.value}%"></div></div>
-          <strong>${item.count ? `${item.value}%` : '—'}</strong>
-        </div>`)
-      .join('');
-
-    const attendanceChart = dayRates
-      .map((rate, index) => `
-        <div class="chart-row">
-          <div class="chart-label">اليوم ${index + 1}</div>
-          <div class="bar-track"><div class="bar-fill attendance" style="width:${rate}%"></div></div>
-          <strong>${rate}%</strong>
-        </div>`)
-      .join('');
-
-    const rows = enrollments
-      .map(({ trainee, enrollment }, index) => {
-        const days = enrollment?.attendanceDays ?? [];
-        const attendanceValues = [0, 1, 2].map((dayIndex) => {
-          const status = days[dayIndex]?.status;
-          return status === 'present'
-            ? '<span class="ok">حاضر</span>'
-            : status === 'absent'
-              ? '<span class="bad">غائب</span>'
-              : '<span class="muted">لم يسجل</span>';
-        });
-
-        const assessmentValue = (
-          score: number | undefined,
-          state: string | undefined,
-        ) =>
-          typeof score === 'number'
-            ? `${safe(score)}/100`
-            : state === 'completed'
-              ? 'مكتمل'
-              : '—';
-
-        return `
-          <tr>
-            <td class="number">${index + 1}</td>
-            <td class="trainee">
-              <strong>${safe(getTraineeName(trainee) || '—')}</strong>
-              ${getEnglishName(trainee) ? `<small>${safe(getEnglishName(trainee))}</small>` : ''}
-            </td>
-            <td>${attendanceValues[0]}</td>
-            <td>${attendanceValues[1]}</td>
-            <td>${attendanceValues[2]}</td>
-            <td>${assessmentValue(enrollment?.preAssessmentScore, enrollment?.preAssessment)}</td>
-            <td>${assessmentValue(enrollment?.postAssessmentScore, enrollment?.postAssessment)}</td>
-            <td>${assessmentValue(enrollment?.courseEvaluationScore, enrollment?.courseEvaluation)}</td>
-            <td class="progress">${safe(enrollment?.progress ?? 0)}%</td>
-          </tr>`;
-      })
-      .join('');
-
-    const pageBreak = '<div class="page-break"></div>';
-
-    printDocument.open();
-    printDocument.write(`<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8" />
-<title>التقرير النهائي - ${safe(companyName)} - ${safe(courseTitle)}</title>
-<style>
-  @page { size: A4 landscape; margin: 11mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    font-family: Arial, Tahoma, sans-serif;
-    color: #172033;
-    background: #fff;
-    font-size: 12px;
-    line-height: 1.65;
+    window.open(
+      `/certificate?groupId=${encodeURIComponent(selectedGroup.id)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   }
-  .page { width: 100%; }
-  .header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 30px;
-    border-bottom: 3px solid #172033;
-    padding-bottom: 12px;
-    margin-bottom: 16px;
-  }
-  .brand { text-align: right; }
-  .brand-name { font-size: 25px; font-weight: 900; letter-spacing: .4px; }
-  .brand-sub { color: #6b7280; font-size: 10px; }
-  .report-title { text-align: left; }
-  .report-title h1 { margin: 0; font-size: 24px; font-weight: 900; }
-  .report-title p { margin: 2px 0 0; color: #6b7280; font-size: 10px; }
-  .section { margin-top: 18px; }
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 16px;
-    font-weight: 900;
-    margin: 0 0 8px;
-  }
-  .section-title:before {
-    content: '';
-    width: 5px;
-    height: 19px;
-    background: #172033;
-    display: inline-block;
-    border-radius: 3px;
-  }
-  .intro {
-    border: 1px solid #dfe3e8;
-    border-radius: 9px;
-    padding: 12px 14px;
-    background: #fafbfc;
-    font-size: 12px;
-  }
-  .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .info-card { border: 1px solid #dfe3e8; border-radius: 8px; padding: 8px 10px; min-height: 55px; }
-  .label { color: #6b7280; font-size: 9px; margin-bottom: 1px; }
-  .value { font-size: 11px; font-weight: 800; }
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .content-card { border: 1px solid #dfe3e8; border-radius: 9px; padding: 11px 14px; }
-  ul { margin: 4px 0 0; padding-right: 18px; }
-  li { margin: 4px 0; }
-  .empty { color: #9ca3af; margin: 0; }
-  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-  .stat { border: 1px solid #dfe3e8; border-radius: 8px; padding: 9px; text-align: center; }
-  .stat strong { display: block; font-size: 19px; margin-bottom: 1px; }
-  .stat span { color: #6b7280; font-size: 9px; }
-  .chart-card { border: 1px solid #dfe3e8; border-radius: 9px; padding: 12px 14px; }
-  .chart-row { display: grid; grid-template-columns: 120px 1fr 48px; gap: 9px; align-items: center; margin: 9px 0; }
-  .chart-label { font-size: 10px; font-weight: 700; }
-  .bar-track { height: 15px; background: #edf0f3; border-radius: 10px; overflow: hidden; direction: ltr; }
-  .bar-fill { height: 100%; background: #172033; border-radius: 10px; min-width: 0; }
-  .bar-fill.attendance { background: #334155; }
-  .chart-row strong { font-size: 11px; text-align: left; direction: ltr; }
-  .comparison {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
-    margin-top: 10px;
-  }
-  .metric { border: 1px solid #dfe3e8; border-radius: 8px; padding: 10px; text-align: center; }
-  .metric strong { display: block; font-size: 21px; }
-  .metric span { color: #6b7280; font-size: 9px; }
-  .metric.improvement strong { font-size: 24px; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 8px; }
-  thead { display: table-header-group; }
-  tr { page-break-inside: avoid; }
-  th { background: #172033; color: #fff; font-weight: 700; padding: 7px 5px; border: 1px solid #172033; font-size: 9px; }
-  td { padding: 6px 5px; border: 1px solid #dfe3e8; text-align: center; vertical-align: middle; font-size: 9px; }
-  tbody tr:nth-child(even) td { background: #f7f8fa; }
-  .number { width: 30px; }
-  .trainee { width: 21%; text-align: right; }
-  .trainee small { display: block; color: #6b7280; font-size: 8px; direction: ltr; text-align: right; }
-  .ok { font-weight: 800; }
-  .bad { font-weight: 800; }
-  .muted { color: #9ca3af; }
-  .progress { font-weight: 800; }
-  .page-break { page-break-before: always; }
-  .footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #dfe3e8; display: flex; justify-content: space-between; color: #6b7280; font-size: 8px; }
-  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 70px; margin-top: 28px; page-break-inside: avoid; }
-  .signature { padding-top: 26px; border-top: 1px solid #9ca3af; text-align: center; color: #4b5563; }
-  .summary-box { border: 1px solid #dfe3e8; border-radius: 9px; padding: 12px 14px; background: #fafbfc; }
-  @media print { .no-print { display: none !important; } }
-</style>
-</head>
-<body>
-<div class="page">
-  <header class="header">
-    <div class="brand">
-      <div class="brand-name">IMPACT TRAINING</div>
-      <div class="brand-sub">Training &amp; Development</div>
-    </div>
-    <div class="report-title">
-      <h1>التقرير النهائي للبرنامج التدريبي</h1>
-      <p>تقرير تنفيذ البرنامج ونتائج المتدربين وقياس الأثر التدريبي</p>
-    </div>
-  </header>
 
-  <section class="info-grid">
-    <div class="info-card"><div class="label">الشركة</div><div class="value">${safe(companyName)}</div></div>
-    <div class="info-card"><div class="label">الدورة التدريبية</div><div class="value">${safe(courseTitle)}</div></div>
-    <div class="info-card"><div class="label">الفترة التدريبية</div><div class="value">${safe(startDate)}${endDate !== '—' ? ` — ${safe(endDate)}` : ''}</div></div>
-    <div class="info-card"><div class="label">الموقع</div><div class="value">${safe(location)}</div></div>
-    <div class="info-card"><div class="label">المسؤول</div><div class="value">${safe(responsible)}</div></div>
-    <div class="info-card"><div class="label">عدد المتدربين</div><div class="value">${members.length}</div></div>
-    <div class="info-card"><div class="label">متوسط التقدم</div><div class="value">${progressAverage}%</div></div>
-    <div class="info-card"><div class="label">تاريخ إصدار التقرير</div><div class="value">${safe(generatedAt)}</div></div>
-  </section>
-
-  <section class="section">
-    <h2 class="section-title">نبذة عن البرنامج</h2>
-    <div class="intro">${safe(course?.description || course?.shortDescription || 'لا توجد نبذة تعريفية مضافة للبرنامج حتى الآن.')}</div>
-  </section>
-
-  <section class="section two-col">
-    <div class="content-card">
-      <h2 class="section-title">أهداف البرنامج</h2>
-      ${listHtml(objectives, 'لم تتم إضافة أهداف البرنامج بعد.')}
-    </div>
-    <div class="content-card">
-      <h2 class="section-title">محاور البرنامج</h2>
-      ${listHtml(outlineItems, 'لم تتم إضافة محاور البرنامج بعد.')}
-    </div>
-  </section>
-
-  <section class="section">
-    <h2 class="section-title">ماذا تعلم المتدربون؟</h2>
-    <div class="content-card">
-      ${listHtml(outcomes, 'لم تتم إضافة مخرجات التعلم للبرنامج بعد.')}
-    </div>
-  </section>
-
-  ${pageBreak}
-
-  <section class="section">
-    <h2 class="section-title">ملخص الأداء والنتائج</h2>
-    <div class="stats">
-      <div class="stat"><strong>${members.length}</strong><span>إجمالي المتدربين</span></div>
-      <div class="stat"><strong>${attendanceRate}%</strong><span>نسبة الحضور</span></div>
-      <div class="stat"><strong>${completedEnrollments}</strong><span>مكتمل التدريب</span></div>
-      <div class="stat"><strong>${progressAverage}%</strong><span>متوسط التقدم</span></div>
-      <div class="stat"><strong>${evaluationAverage || '—'}${evaluationScores.length ? '%' : ''}</strong><span>متوسط تقييم البرنامج</span></div>
-    </div>
-  </section>
-
-  <section class="section two-col">
-    <div class="chart-card">
-      <h2 class="section-title">مقارنة التقييمات</h2>
-      ${assessmentChart}
-      <div class="comparison">
-        <div class="metric"><strong>${preAverage || '—'}${preScores.length ? '%' : ''}</strong><span>متوسط Pre Assessment</span></div>
-        <div class="metric"><strong>${postAverage || '—'}${postScores.length ? '%' : ''}</strong><span>متوسط Post Assessment</span></div>
-        <div class="metric improvement"><strong>${improvement > 0 ? '+' : ''}${preScores.length && postScores.length ? `${improvement}%` : '—'}</strong><span>نسبة التحسن</span></div>
-      </div>
-    </div>
-    <div class="chart-card">
-      <h2 class="section-title">الحضور حسب أيام البرنامج</h2>
-      ${attendanceChart}
-      <div class="comparison">
-        <div class="metric"><strong>${preCompleted}</strong><span>Pre مكتمل</span></div>
-        <div class="metric"><strong>${postCompleted}</strong><span>Post مكتمل</span></div>
-        <div class="metric"><strong>${evaluationCompleted}</strong><span>Evaluation مكتمل</span></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2 class="section-title">الاستنتاج العام</h2>
-    <div class="summary-box">
-      تم تنفيذ برنامج <strong>${safe(courseTitle)}</strong> لصالح <strong>${safe(companyName)}</strong> بعدد <strong>${members.length}</strong> متدرب. بلغت نسبة الحضور المسجلة <strong>${attendanceRate}%</strong>، وبلغ متوسط التقدم <strong>${progressAverage}%</strong>.
-      ${preScores.length && postScores.length
-        ? ` وأظهرت نتائج التقييم القبلي والبعدي ${improvement > 0 ? `تحسنًا قدره <strong>${improvement} نقطة مئوية</strong>` : 'عدم وجود تحسن إيجابي مسجل'}.`
-        : ' ولم تتوفر بيانات كافية للمقارنة بين التقييم القبلي والبعدي.'}
-    </div>
-  </section>
-
-  ${pageBreak}
-
-  <section class="section">
-    <h2 class="section-title">النتائج التفصيلية للمتدربين</h2>
-    <table>
-      <thead>
-        <tr>
-          <th class="number">#</th>
-          <th class="trainee">المتدرب</th>
-          <th>اليوم 1</th>
-          <th>اليوم 2</th>
-          <th>اليوم 3</th>
-          <th>Pre Assessment</th>
-          <th>Post Assessment</th>
-          <th>Course Evaluation</th>
-          <th>التقدم</th>
-        </tr>
-      </thead>
-      <tbody>${rows || '<tr><td colspan="9">لا يوجد متدربون في هذه المجموعة.</td></tr>'}</tbody>
-    </table>
-  </section>
-
-  <div class="signatures">
-    <div class="signature">اعتماد مركز التدريب</div>
-    <div class="signature">اعتماد ممثل الشركة</div>
-  </div>
-
-  <footer class="footer">
-    <span>IMPACT TRAINING — التقرير النهائي للبرنامج التدريبي</span>
-    <span>تم إنشاء التقرير بتاريخ ${safe(generatedAt)}</span>
-  </footer>
-</div>
-</body>
-</html>`);
-
-    printDocument.close();
-    printWindow.focus();
-    printWindow.onafterprint = () => printFrame.remove();
-
-    setTimeout(() => {
-      printWindow.print();
-      setTimeout(() => {
-        if (document.body.contains(printFrame)) printFrame.remove();
-      }, 1500);
-    }, 400);
-  }
 
   /*
    * =========================
@@ -1439,6 +1056,21 @@ export default function GroupsPage() {
                           item.id ===
                           group.scheduleId,
                       );
+                    const groupStartDate = group.corporateDate
+                      ? new Date(`${group.corporateDate}T00:00:00`)
+                      : schedule?.startDate;
+                    const groupEndDate = group.corporateDate
+                      ? (() => {
+                          const date = new Date(`${group.corporateDate}T00:00:00`);
+                          date.setDate(date.getDate() + 2);
+                          return date;
+                        })()
+                      : schedule?.endDate;
+                    const groupLocation =
+                      group.corporateLocation ||
+                      schedule?.city ||
+                      schedule?.location ||
+                      '—';
 
                     const isSelected =
                       group.id ===
@@ -1492,21 +1124,15 @@ export default function GroupsPage() {
                         >
                           <span>
                             📅{' '}
-                            {formatDate(
-                              schedule?.startDate,
-                            )}
-                            {schedule?.endDate
-                              ? ` — ${formatDate(
-                                  schedule.endDate,
-                                )}`
+                            {formatDate(groupStartDate)}
+                            {groupEndDate
+                              ? ` — ${formatDate(groupEndDate)}`
                               : ''}
                           </span>
 
                           <span>
                             📍{' '}
-                            {schedule?.city ||
-                              schedule?.location ||
-                              '—'}
+                            {groupLocation}
                           </span>
 
                           <span>
@@ -1577,21 +1203,20 @@ export default function GroupsPage() {
                   >
                     <span className="admin-tag">
                       📅{' '}
-                      {formatDate(
-                        selectedSchedule?.startDate,
-                      )}
-                      {selectedSchedule?.endDate
-                        ? ` — ${formatDate(
-                            selectedSchedule.endDate,
-                          )}`
+                      {formatDate(selectedStartDate)}
+                      {selectedEndDate
+                        ? ` — ${formatDate(selectedEndDate)}`
                         : ''}
                     </span>
 
                     <span className="admin-tag">
                       📍{' '}
-                      {selectedSchedule?.city ||
-                        selectedSchedule?.location ||
-                        '—'}
+                      {selectedLocation}
+                    </span>
+
+                    <span className="admin-tag">
+                      {selectedDelivery === 'أونلاين' ? '💻' : '🏢'}{' '}
+                      {selectedDelivery}
                     </span>
 
                     <span className="admin-tag">
@@ -1627,6 +1252,14 @@ export default function GroupsPage() {
                     }
                   >
                     التقرير والنتائج
+                  </button>
+
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-primary"
+                    onClick={() => void printGroupCertificates()}
+                  >
+                    شهادات المجموعة
                   </button>
 
                   <button
@@ -2526,14 +2159,10 @@ export default function GroupsPage() {
                     </div>
 
                     <strong>
-                      {formatDateLong(
-                        selectedSchedule?.startDate,
-                      )}
+                      {formatDateLong(selectedStartDate)}
 
-                      {selectedSchedule?.endDate &&
-                        ` — ${formatDateLong(
-                          selectedSchedule.endDate,
-                        )}`}
+                      {selectedEndDate &&
+                        ` — ${formatDateLong(selectedEndDate)}`}
                     </strong>
                   </div>
 
@@ -2556,9 +2185,7 @@ export default function GroupsPage() {
                     </div>
 
                     <strong>
-                      {selectedSchedule?.city ||
-                        selectedSchedule?.location ||
-                        '—'}
+                      {selectedLocation}
                     </strong>
                   </div>
 
@@ -2774,7 +2401,9 @@ export default function GroupsPage() {
                 <button
                   type="button"
                   className="admin-btn admin-btn-primary"
-                  onClick={printProfessionalReport}
+                  onClick={() =>
+                    window.print()
+                  }
                 >
                   طباعة التقرير
                 </button>
@@ -2912,59 +2541,53 @@ export default function GroupsPage() {
                 </div>
 
                 <div className="admin-field">
-                  <label>
-                    الموعد
-                  </label>
-
-                  <select
-                    className="admin-select"
-                    value={
-                      form.scheduleId
-                    }
+                  <label>تاريخ الدورة</label>
+                  <input
+                    className="admin-input"
+                    type="date"
+                    required
+                    value={form.corporateDate}
                     onChange={(event) =>
                       setForm({
                         ...form,
-                        scheduleId:
-                          event.target
-                            .value,
+                        corporateDate: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label>طريقة التنفيذ</label>
+                  <select
+                    className="admin-select"
+                    value={form.corporateDelivery}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        corporateDelivery: event.target.value as 'حضوري' | 'أونلاين',
                       })
                     }
                   >
-                    <option value="">
-                      بدون موعد محدد
-                    </option>
-
-                    {schedules
-                      .filter(
-                        (schedule) =>
-                          schedule.courseId ===
-                          form.courseId,
-                      )
-                      .map(
-                        (
-                          schedule,
-                        ) => (
-                          <option
-                            key={
-                              schedule.id
-                            }
-                            value={
-                              schedule.id
-                            }
-                          >
-                            {formatDate(
-                              schedule.startDate,
-                            )}
-                            {' — '}
-                            {schedule.city ||
-                              schedule.location ||
-                              'Online'}
-                          </option>
-                        ),
-                      )}
+                    <option value="حضوري">حضوري</option>
+                    <option value="أونلاين">أونلاين</option>
                   </select>
                 </div>
 
+                <div className="admin-field">
+                  <label>المدينة / مكان التنفيذ</label>
+                  <input
+                    className="admin-input"
+                    required
+                    placeholder="مثال: الرياض أو مقر الشركة"
+                    value={form.corporateLocation}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        corporateLocation: event.target.value,
+                      })
+                    }
+                  />
+                </div>
                 <div className="admin-field">
                   <label>
                     اسم المسؤول
