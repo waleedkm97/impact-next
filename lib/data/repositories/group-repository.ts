@@ -15,6 +15,7 @@ function normalize(group: TrainingGroup): TrainingGroup {
   return {
     ...group,
     traineeIds: [...(group.traineeIds ?? [])],
+    materialUrl: group.materialUrl,
     createdAt: date(group.createdAt),
     updatedAt: date(group.updatedAt),
     assessmentSettings: group.assessmentSettings
@@ -129,6 +130,7 @@ function clone(group: TrainingGroup): TrainingGroup {
   return {
     ...group,
     traineeIds: [...group.traineeIds],
+    materialUrl: group.materialUrl,
     assessmentSettings: group.assessmentSettings
       ? {
           pre: { ...group.assessmentSettings.pre },

@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
+import { groupRepository } from '@/lib/data/repositories/group-repository';
 import type { Course, CourseAssessment, CourseSchedule } from '@/types/course';
 import type { Trainee, CourseEnrollment } from '@/types/trainee';
 
@@ -38,6 +39,86 @@ function getAssessment(
   );
 }
 
+function getAttendanceWindowState(
+  dayDate: Date | string | undefined,
+  schedule: CourseSchedule | null,
+  currentTime: Date,
+): 'open' | 'upcoming' | 'closed' {
+  if (!dayDate) return 'closed';
+
+  const trainingDate = new Date(dayDate);
+  const sameCalendarDay =
+    currentTime.getFullYear() === trainingDate.getFullYear() &&
+    currentTime.getMonth() === trainingDate.getMonth() &&
+    currentTime.getDate() === trainingDate.getDate();
+
+  if (!sameCalendarDay) {
+    return currentTime < trainingDate ? 'upcoming' : 'closed';
+  }
+
+  const startTime = schedule?.startTime?.trim();
+  const endTime = schedule?.endTime?.trim();
+
+  if (!startTime || !endTime) {
+    return 'open';
+  }
+
+  const [startHour, startMinute] = startTime.split(':').map(Number);
+  const [endHour, endMinute] = endTime.split(':').map(Number);
+
+  if (
+    !Number.isFinite(startHour) ||
+    !Number.isFinite(startMinute) ||
+    !Number.isFinite(endHour) ||
+    !Number.isFinite(endMinute)
+  ) {
+    return 'open';
+  }
+
+  const windowStart = new Date(currentTime);
+  windowStart.setHours(startHour, startMinute, 0, 0);
+
+  const windowEnd = new Date(currentTime);
+  windowEnd.setHours(endHour, endMinute, 59, 999);
+
+  if (windowEnd.getTime() < windowStart.getTime()) {
+    windowEnd.setDate(windowEnd.getDate() + 1);
+  }
+
+  if (currentTime < windowStart) return 'upcoming';
+  if (currentTime > windowEnd) return 'closed';
+  return 'open';
+}
+
+async function openTrainingMaterial(url: string) {
+  try {
+    if (url.startsWith('data:application/pdf')) {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+
+      if (!opened) {
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (error) {
+    console.error('Failed to open training material:', error);
+    alert('تعذر فتح ملف المادة التدريبية. حاول مرة أخرى.');
+  }
+}
+
 export default function CourseLearningPage() {
   const searchParams = useSearchParams();
   const id = searchParams.get('id') || '';
@@ -46,8 +127,19 @@ export default function CourseLearningPage() {
   const [schedule, setSchedule] = useState<CourseSchedule | null>(null);
   const [user, setUser] = useState<Trainee | null>(null);
   const [enrollment, setEnrollment] = useState<CourseEnrollment | null>(null);
+  const [certificate, setCertificate] = useState<any>(null);
+  const [groupMaterialUrl, setGroupMaterialUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [attendanceSaving, setAttendanceSaving] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -62,17 +154,56 @@ export default function CourseLearningPage() {
         if (!active) return;
 
         setCourse(currentCourse);
-        setUser(currentUser);
 
         if (!currentCourse || !currentUser) {
+          setUser(currentUser);
           setLoading(false);
           return;
         }
+
+        const certificates = await traineeRepository.getCertificates(
+          currentUser.id,
+        );
+        const currentCertificate =
+          certificates.find(
+            (item) => item.courseId === currentCourse.id,
+          ) ?? null;
+
+        setCertificate(currentCertificate);
+        setUser({
+          ...currentUser,
+          certificates,
+        });
 
         const currentEnrollment =
           currentUser.enrollments.find(
             (item) => item.courseId === currentCourse.id,
           ) ?? null;
+
+        let currentGroup: any = null;
+
+        if (currentEnrollment?.groupId) {
+          currentGroup = await groupRepository.findById(
+            currentEnrollment.groupId,
+          );
+        }
+
+        // بعض التسجيلات القديمة قد لا تحتوي على groupId،
+        // لذلك نبحث أيضًا عن المجموعة التي تضم المتدرب ضمن traineeIds.
+        if (!currentGroup) {
+          const courseGroups = await groupRepository.findAll({
+            filter: { courseId: currentCourse.id },
+          });
+
+          currentGroup =
+            courseGroups.find((group) =>
+              group.traineeIds?.includes(currentUser.id),
+            ) ?? null;
+        }
+
+        if (active) {
+          setGroupMaterialUrl(currentGroup?.materialUrl ?? null);
+        }
 
         if (currentEnrollment) {
           try {
@@ -145,6 +276,7 @@ export default function CourseLearningPage() {
   );
 
   const attendanceDays = enrollment?.attendanceDays ?? [];
+  const effectiveMaterialUrl = groupMaterialUrl || course?.materialUrl || '';
 
   if (loading) {
     return (
@@ -396,23 +528,35 @@ export default function CourseLearningPage() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
-            {/* التحضير */}
-            <Link
-              href={`/account/course-preparation?courseId=${encodeURIComponent(course.id)}`}
-              className="group rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
+            {/* المادة التدريبية */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!effectiveMaterialUrl) {
+                  alert('لم تتم إضافة المادة التدريبية لهذه الدورة بعد.');
+                  return;
+                }
+
+                void openTrainingMaterial(effectiveMaterialUrl);
+              }}
+              className={`group rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm ${
+                effectiveMaterialUrl ? '' : 'opacity-60'
+              }`}
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-lg text-[#062b67]">
-                
+                PDF
               </div>
 
               <h3 className="mt-4 font-bold text-[#062b67]">
-                التحضير
+                المادة التدريبية
               </h3>
 
               <p className="mt-2 text-sm text-gray-500">
-                المواد والتعليمات التحضيرية للدورة
+                {effectiveMaterialUrl
+                  ? 'فتح أو تنزيل ملف المادة التدريبية PDF'
+                  : 'لم تتم إضافة المادة بعد'}
               </p>
-            </Link>
+            </button>
 
             {/* التقييم القبلي */}
             <Link
@@ -489,7 +633,7 @@ export default function CourseLearningPage() {
             </Link>
 
             {/* الشهادة */}
-            {isCompleted && (
+            {certificate && (
               <Link
                 href={`/certificate?courseId=${encodeURIComponent(course.id)}`}
                 className="group rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
@@ -512,7 +656,7 @@ export default function CourseLearningPage() {
         </section>
 
         {/* موارد الدورة */}
-        {(course.materialUrl || (course.delivery === 'online' && (schedule?.onlineMeetingLink || course.meetingLink))) && (
+        {(course.delivery === 'online' && (schedule?.onlineMeetingLink || course.meetingLink)) && (
           <section className="mt-6 rounded-3xl border bg-white p-6 shadow-sm md:p-8">
             <div className="mb-6">
               <h2 className="text-xl font-bold text-[#062b67]">
@@ -524,22 +668,6 @@ export default function CourseLearningPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              {course.materialUrl && (
-                <a
-                  href={course.materialUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
-                >
-                  <h3 className="font-bold text-[#062b67]">
-                    المادة التدريبية
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-gray-500">
-                    فتح أو تنزيل ملف المادة التدريبية PDF.
-                  </p>
-                </a>
-              )}
-
               {course.delivery === 'online' && (schedule?.onlineMeetingLink || course.meetingLink) && (
                 <a
                   href={schedule?.onlineMeetingLink || course.meetingLink || '#'}
@@ -592,11 +720,18 @@ export default function CourseLearningPage() {
                     ? 'غائب'
                     : 'لم يتم التسجيل';
 
+              const windowState = getAttendanceWindowState(
+                day?.date,
+                schedule,
+                currentTime,
+              );
+              const canMarkAttendance = windowState === 'open';
+
               async function markAttendance(nextStatus: 'present' | 'absent') {
-                if (!user || !enrollment) return;
+                if (!user || !enrollment || !canMarkAttendance) return;
                 try {
                   setAttendanceSaving(index);
-                  const updated = await traineeRepository.updateAttendanceDay(
+                  const updated = await traineeRepository.updateAttendanceDayForTrainee(
                     user.id,
                     enrollment.id ?? enrollment.courseId,
                     index,
@@ -605,11 +740,26 @@ export default function CourseLearningPage() {
                   setEnrollment({ ...updated });
                 } catch (error) {
                   console.error('Failed to update attendance:', error);
-                  alert('تعذر حفظ الحضور. حاول مرة أخرى.');
+                  alert(
+                    error instanceof Error
+                      ? error.message.includes('Attendance is available')
+                        ? 'التحضير متاح فقط خلال وقت الدورة المحدد.'
+                        : error.message.includes('only available on the training day')
+                          ? 'التحضير متاح فقط في يوم التدريب.'
+                          : 'تعذر حفظ الحضور. حاول مرة أخرى.'
+                      : 'تعذر حفظ الحضور. حاول مرة أخرى.',
+                  );
                 } finally {
                   setAttendanceSaving(null);
                 }
               }
+
+              const windowLabel =
+                windowState === 'open'
+                  ? 'التحضير متاح الآن'
+                  : windowState === 'upcoming'
+                    ? 'التحضير يفتح في وقت الدورة'
+                    : 'انتهى وقت التحضير';
 
               return (
                 <div key={index} className="rounded-2xl border bg-gray-50 p-5">
@@ -626,10 +776,21 @@ export default function CourseLearningPage() {
                   }`}>
                     {statusLabel}
                   </div>
+                  <div className={`mt-3 rounded-xl px-3 py-2 text-sm ${
+                    windowState === 'open'
+                      ? 'bg-blue-50 text-[#062b67]'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {windowLabel}
+                    {schedule?.startTime && schedule?.endTime && (
+                      <span className="mr-1">({schedule.startTime} - {schedule.endTime})</span>
+                    )}
+                  </div>
+
                   <div className="mt-5 grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      disabled={attendanceSaving === index}
+                      disabled={attendanceSaving === index || !canMarkAttendance}
                       onClick={() => void markAttendance('present')}
                       className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
                         status === 'present'
@@ -641,7 +802,7 @@ export default function CourseLearningPage() {
                     </button>
                     <button
                       type="button"
-                      disabled={attendanceSaving === index}
+                      disabled={attendanceSaving === index || !canMarkAttendance}
                       onClick={() => void markAttendance('absent')}
                       className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
                         status === 'absent'

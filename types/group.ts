@@ -27,6 +27,7 @@ export interface TrainingGroup {
   corporateDate?: string;
   corporateDelivery?: 'حضوري' | 'أونلاين';
   corporateLocation?: string;
+  materialUrl?: string;
 
   companyName?: string;
   responsibleName?: string;

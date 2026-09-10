@@ -62,6 +62,10 @@ export default function Account() {
 
         if (!active) return;
 
+        // Refresh certificates before rendering the account page so certificates
+        // that are already eligible are available to the trainee as well.
+        await traineeRepository.getCertificates(currentUser.id);
+
         const refreshedUser =
           await traineeRepository.findById(currentUser.id);
 
@@ -418,6 +422,13 @@ export default function Account() {
                 const completed =
                   enrollment.status === 'completed';
 
+                const certificate =
+                  user.certificates?.find(
+                    (item: any) =>
+                      item.id === enrollment.certificateId ||
+                      item.courseId === enrollment.courseId,
+                  ) ?? null;
+
                 const isRecordedCourse =
                   course?.type === 'recorded';
 
@@ -450,21 +461,11 @@ export default function Account() {
                     : formatDate(schedule.startDate)
                   : 'يحدد لاحقاً';
 
-                const locationText =
-                  schedule?.location ||
-                  schedule?.city ||
-                  (course?.delivery === 'online'
-                    ? 'أونلاين مباشر'
-                    : 'يحدد لاحقاً');
+                const isOnlineCourse = course?.delivery === 'online';
 
-                const deliveryText =
-                  course?.delivery === 'online'
-                    ? 'أونلاين مباشر'
-                    : course?.delivery === 'in-person'
-                      ? 'حضوري'
-                      : course?.delivery === 'hybrid'
-                        ? 'حضوري / أونلاين'
-                        : '—';
+                const locationText = isOnlineCourse
+                  ? 'أونلاين مباشر'
+                  : schedule?.location || schedule?.city || 'يحدد لاحقاً';
 
 
                 return (
@@ -555,43 +556,56 @@ export default function Account() {
                             </strong>
                           </div>
 
-                          <div className="rounded-2xl bg-gray-50 p-4">
-                            <span className="text-xs text-gray-500">
-                              المدينة
-                            </span>
-                            <strong className="mt-1 block text-sm text-[#062b67]">
-                              {schedule?.city || '—'}
-                            </strong>
-                          </div>
-
-                          <div className="rounded-2xl bg-gray-50 p-4">
-                            <span className="text-xs text-gray-500">
-                              طريقة التدريب
-                            </span>
-                            <strong className="mt-1 block text-sm text-[#062b67]">
-                              {deliveryText}
-                            </strong>
-                          </div>
+                          {!isOnlineCourse && (
+                            <div className="rounded-2xl bg-gray-50 p-4">
+                              <span className="text-xs text-gray-500">
+                                المدينة
+                              </span>
+                              <strong className="mt-1 block text-sm text-[#062b67]">
+                                {schedule?.city || '—'}
+                              </strong>
+                            </div>
+                          )}
                         </div>
                       )}
 
-                      {/* Course button */}
-                      <button
-                        className="mt-6 w-full rounded-xl bg-[#062b67] px-5 py-3 font-semibold text-white transition hover:opacity-90"
-                        onClick={() =>
-                          router.push(
-                            `/course-learning?id=${encodeURIComponent(
-                              enrollment.courseId,
-                            )}`,
-                          )
-                        }
-                      >
-                        {completed
-                          ? 'عرض الدورة'
-                          : isRecordedCourse && progress > 0
-                            ? 'متابعة الدورة'
-                            : 'دخول إلى الدورة'}
-                      </button>
+                      {/* Course actions */}
+                      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                        <button
+                          className="w-full rounded-xl bg-[#062b67] px-5 py-3 font-semibold text-white transition hover:opacity-90"
+                          onClick={() =>
+                            router.push(
+                              `/course-learning?id=${encodeURIComponent(
+                                enrollment.courseId,
+                              )}`,
+                            )
+                          }
+                        >
+                          {completed
+                            ? 'عرض الدورة'
+                            : isRecordedCourse && progress > 0
+                              ? 'متابعة الدورة'
+                              : 'دخول إلى الدورة'}
+                        </button>
+
+                        {certificate && (
+                          <button
+                            type="button"
+                            className="w-full rounded-xl border border-[#8b6508] bg-white px-5 py-3 font-semibold text-[#8b6508] transition hover:bg-[#8b6508]/5"
+                            onClick={() =>
+                              router.push(
+                                `/certificate?traineeId=${encodeURIComponent(
+                                  user.id,
+                                )}&certificateId=${encodeURIComponent(
+                                  certificate.id,
+                                )}`,
+                              )
+                            }
+                          >
+                            عرض الشهادة
+                          </button>
+                        )}
+                      </div>
 
 
                     </div>

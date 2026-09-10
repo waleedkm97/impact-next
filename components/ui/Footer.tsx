@@ -1,9 +1,23 @@
 import Link from "next/link";
+import Image from "next/image";
+
 export default function Footer() {
-    return (<footer className="footer">
+  return (
+    <footer className="footer">
       <div className="footer-inner">
         <div className="footer-brand">
-          <h3>Impact Training</h3>
+          <Image
+            src="/assets/logo/logo_white-remove.png"
+            alt="Impact Training"
+            width={180}
+            height={80}
+            style={{
+              width: "180px",
+              height: "auto",
+              objectFit: "contain",
+              marginBottom: "12px",
+            }}
+          />
           <p>حلول تدريبية تساعد الأفراد والمنشآت على رفع مستوى الأداء.</p>
         </div>
 
@@ -24,6 +38,6 @@ export default function Footer() {
       <div className="footer-bottom">
         © Impact Training
       </div>
-    </footer>);
+    </footer>
+  );
 }
-

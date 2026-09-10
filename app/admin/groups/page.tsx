@@ -155,6 +155,7 @@ export default function GroupsPage() {
     corporateDate: '',
     corporateDelivery: 'حضوري' as 'حضوري' | 'أونلاين',
     corporateLocation: '',
+    materialUrl: '',
     notes: '',
   });
 
@@ -315,6 +316,7 @@ export default function GroupsPage() {
       corporateDate: '',
       corporateDelivery: 'حضوري',
       corporateLocation: '',
+      materialUrl: '',
       notes: '',
     });
   }
@@ -332,6 +334,7 @@ export default function GroupsPage() {
       corporateDate: '',
       corporateDelivery: 'حضوري',
       corporateLocation: '',
+      materialUrl: '',
       notes: '',
     });
 
@@ -360,10 +363,28 @@ export default function GroupsPage() {
         selectedGroup.corporateDelivery || 'حضوري',
       corporateLocation:
         selectedGroup.corporateLocation || '',
+      materialUrl:
+        selectedGroup.materialUrl || '',
       notes: selectedGroup.notes || '',
     });
 
     setOpen(true);
+  }
+
+  function readGroupMaterialFile(file: File) {
+    if (file.type !== 'application/pdf') {
+      alert('يرجى اختيار ملف PDF فقط.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((current) => ({
+        ...current,
+        materialUrl: String(reader.result || ''),
+      }));
+    };
+    reader.readAsDataURL(file);
   }
 
   async function createGroup(
@@ -407,6 +428,9 @@ export default function GroupsPage() {
 
       corporateLocation:
         form.corporateLocation.trim() || undefined,
+
+      materialUrl:
+        form.materialUrl || undefined,
 
       companyName:
         companyName || undefined,
@@ -493,6 +517,9 @@ export default function GroupsPage() {
 
         corporateLocation:
           form.corporateLocation.trim() || undefined,
+
+        materialUrl:
+          form.materialUrl || undefined,
 
         companyName:
           form.companyName.trim() ||
@@ -2587,6 +2614,27 @@ export default function GroupsPage() {
                       })
                     }
                   />
+                </div>
+                <div className="admin-field">
+                  <label>المادة التدريبية الخاصة بالمجموعة</label>
+                  <input
+                    className="admin-input"
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) readGroupMaterialFile(file);
+                    }}
+                  />
+                  {form.materialUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                      <span style={{ color: '#067647', fontWeight: 700, fontSize: 12 }}>تم تحديد مادة خاصة لهذه المجموعة.</span>
+                      <a href={form.materialUrl} target="_blank" rel="noreferrer" className="admin-btn admin-btn-light" style={{ textDecoration: 'none' }}>معاينة</a>
+                      <button type="button" className="admin-btn admin-btn-light" onClick={() => setForm({ ...form, materialUrl: '' })}>إزالة</button>
+                    </div>
+                  ) : (
+                    <small style={{ color: '#7a8799', marginTop: 5 }}>اتركها فارغة لاستخدام المادة العامة للبرنامج.</small>
+                  )}
                 </div>
                 <div className="admin-field">
                   <label>

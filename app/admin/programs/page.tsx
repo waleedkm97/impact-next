@@ -69,6 +69,7 @@ const emptyForm = {
   description: '',
   objectives: '',
   audience: '',
+  materialUrl: '',
   materials: true,
   pre: true,
   post: true,
@@ -310,6 +311,19 @@ export default function ProgramsAdmin() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function readMaterialFile(file: File) {
+    if (file.type !== 'application/pdf') {
+      alert('يرجى اختيار ملف PDF فقط.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormValue('materialUrl', String(reader.result || ''));
+    };
+    reader.readAsDataURL(file);
+  }
+
   function addCourse() {
     setEditing(null);
     setForm({ ...emptyForm });
@@ -327,6 +341,7 @@ export default function ProgramsAdmin() {
       description: course.description ?? '',
       objectives: (course.objectives ?? []).join('\n'),
       audience: course.audience ?? '',
+      materialUrl: course.materialUrl ?? '',
       materials: course.materialsEnabled !== false,
       pre: course.preAssessmentEnabled !== false,
       post: course.postAssessmentEnabled !== false,
@@ -373,6 +388,7 @@ export default function ProgramsAdmin() {
       schedules: existing?.schedules ?? [],
       assessments: existing?.assessments ?? [],
       audience: form.audience,
+      materialUrl: form.materialUrl || undefined,
       trainer: {
         id: existing?.trainer?.id ?? makeId('trainer'),
         name: form.trainer,
@@ -1286,6 +1302,29 @@ export default function ProgramsAdmin() {
                     setFormValue('audience', event.target.value)
                   }
                 />
+              </Field>
+
+              <Field label="المادة التدريبية PDF" full>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <input
+                    className="admin-input"
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) readMaterialFile(file);
+                    }}
+                  />
+                  {form.materialUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ color: '#067647', fontWeight: 700, fontSize: 13 }}>تم تحديد المادة التدريبية PDF.</span>
+                      <a href={form.materialUrl} target="_blank" rel="noreferrer" className="admin-btn admin-btn-light" style={{ textDecoration: 'none' }}>معاينة المادة</a>
+                      <button type="button" className="admin-btn admin-btn-light" onClick={() => setFormValue('materialUrl', '')}>إزالة المادة</button>
+                    </div>
+                  ) : (
+                    <small>المادة العامة للبرنامج تظهر لجميع المتدربين، ويمكن استبدالها بمادة خاصة على مستوى المجموعة.</small>
+                  )}
+                </div>
               </Field>
 
               <Field label="الوصف" full>

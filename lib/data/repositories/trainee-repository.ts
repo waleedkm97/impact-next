@@ -666,11 +666,17 @@ enrollment.courseEvaluation = 'locked';
       throw new Error('Enrollment not found');
     }
 
-    const allRequirementsCompleted =
-      enrollment.progress >= 100 &&
-      enrollment.preAssessment === 'completed' &&
-      enrollment.postAssessment === 'completed' &&
-      enrollment.courseEvaluation === 'completed';
+  const { courseRepository } = await import('./course-repository');
+const course = await courseRepository.findById(enrollment.courseId);
+
+const requiresProgress =
+  course ? course.type === 'recorded' : enrollment.progress >= 100;
+
+const allRequirementsCompleted =
+  enrollment.preAssessment === 'completed' &&
+  enrollment.postAssessment === 'completed' &&
+  enrollment.courseEvaluation === 'completed' &&
+  (!requiresProgress || enrollment.progress >= 100);
 
     if (!allRequirementsCompleted) {
       return null;
@@ -757,17 +763,109 @@ enrollment.courseEvaluation = 'locked';
       throw new Error('Attendance day not found');
     }
     enrollment.attendanceDays = enrollment.attendanceDays.map((day, index) =>
-      index === dayIndex ? { ...day, status, markedAt: status === 'not-marked' ? undefined : now() } : day,
+      index === dayIndex
+        ? {
+            ...day,
+            status,
+            markedAt: status === 'not-marked' ? undefined : now(),
+          }
+        : day,
     );
-    const marked = enrollment.attendanceDays.filter((day) => day.status !== 'not-marked');
-    enrollment.attendance = marked.length === 3 && enrollment.attendanceDays.every((day) => day.status === 'present')
-      ? 'present'
-      : marked.some((day) => day.status === 'absent')
-        ? 'absent'
-        : 'not-marked';
+    const marked = enrollment.attendanceDays.filter(
+      (day) => day.status !== 'not-marked',
+    );
+    enrollment.attendance =
+      marked.length === enrollment.attendanceDays.length &&
+      enrollment.attendanceDays.every((day) => day.status === 'present')
+        ? 'present'
+        : marked.some((day) => day.status === 'absent')
+          ? 'absent'
+          : 'not-marked';
     trainee.updatedAt = now();
     await persist();
     return enrollment;
+  }
+
+  /**
+   * Trainee-only attendance update.
+   * The trainee can mark attendance only on the training day and
+   * only during the scheduled start/end time. Admin pages continue
+   * using updateAttendanceDay(), which intentionally has no time restriction.
+   */
+  async updateAttendanceDayForTrainee(
+    id: string,
+    enrollmentId: string,
+    dayIndex: number,
+    status: 'present' | 'absent',
+  ) {
+    const enrollment = await this.ensureAttendanceDays(id, enrollmentId);
+    const day = enrollment.attendanceDays?.[dayIndex];
+
+    if (!day) {
+      throw new Error('Attendance day not found');
+    }
+
+    const today = now();
+    const trainingDate = date(day.date);
+
+    const sameCalendarDay =
+      today.getFullYear() === trainingDate.getFullYear() &&
+      today.getMonth() === trainingDate.getMonth() &&
+      today.getDate() === trainingDate.getDate();
+
+    if (!sameCalendarDay) {
+      throw new Error('Attendance is only available on the training day');
+    }
+
+    if (enrollment.scheduleId) {
+      try {
+        const { scheduleRepository } = await import('./schedule-repository');
+        const schedule = await scheduleRepository.findById(enrollment.scheduleId);
+
+        const startTime = schedule?.startTime?.trim();
+        const endTime = schedule?.endTime?.trim();
+
+        if (startTime && endTime) {
+          const [startHour, startMinute] = startTime
+            .split(':')
+            .map(Number);
+          const [endHour, endMinute] = endTime
+            .split(':')
+            .map(Number);
+
+          if (
+            Number.isFinite(startHour) &&
+            Number.isFinite(startMinute) &&
+            Number.isFinite(endHour) &&
+            Number.isFinite(endMinute)
+          ) {
+            const windowStart = new Date(today);
+            windowStart.setHours(startHour, startMinute, 0, 0);
+
+            const windowEnd = new Date(today);
+            windowEnd.setHours(endHour, endMinute, 59, 999);
+
+            // Support schedules that cross midnight.
+            if (windowEnd.getTime() < windowStart.getTime()) {
+              windowEnd.setDate(windowEnd.getDate() + 1);
+            }
+
+            if (today < windowStart || today > windowEnd) {
+              throw new Error(
+                `Attendance is available only from ${startTime} to ${endTime}`,
+              );
+            }
+          }
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Attendance is available')) {
+          throw error;
+        }
+        // If the schedule cannot be read, keep the date-only restriction.
+      }
+    }
+
+    return this.updateAttendanceDay(id, enrollmentId, dayIndex, status);
   }
 
   async getProgress(id: string, courseId: string) {
