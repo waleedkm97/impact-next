@@ -68,6 +68,13 @@ const [form, setForm] = useState<OrderForm>(initialForm);
 
   useEffect(() => {
     void load();
+
+    const handleFocus = () => {
+      void load();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   async function approve(id: string) {
@@ -204,19 +211,25 @@ async function updateOrder(event: React.FormEvent) {
   });
 
   if (form.type === 'corporate' && order.customer?.groupId) {
-    await groupRepository.update(order.customer.groupId, {
-      name: form.company.trim() || `مجموعة ${course.title}`,
-      courseId: course.id,
-      courseTitle: course.title,
-      corporateDate: form.corporateDate || undefined,
-      corporateDelivery: form.corporateDelivery,
-      corporateLocation: form.corporateLocation.trim() || undefined,
-      companyName: form.company.trim() || undefined,
-      responsibleName: form.responsibleName.trim() || undefined,
-      responsibleEmail: form.responsibleEmail.trim() || undefined,
-      responsiblePhone: form.responsiblePhone.trim() || undefined,
-      notes: form.notes.trim() || undefined,
-    });
+    const existingGroup = await groupRepository.findById(
+      order.customer.groupId,
+    );
+
+    if (existingGroup) {
+      await groupRepository.update(order.customer.groupId, {
+        name: form.company.trim() || `مجموعة ${course.title}`,
+        courseId: course.id,
+        courseTitle: course.title,
+        corporateDate: form.corporateDate || undefined,
+        corporateDelivery: form.corporateDelivery,
+        corporateLocation: form.corporateLocation.trim() || undefined,
+        companyName: form.company.trim() || undefined,
+        responsibleName: form.responsibleName.trim() || undefined,
+        responsibleEmail: form.responsibleEmail.trim() || undefined,
+        responsiblePhone: form.responsiblePhone.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+      });
+    }
   }
 
   setOpen(false);
@@ -350,6 +363,9 @@ companyName: form.company.trim() || undefined,
         <div className="admin-actions">
           <button className="admin-btn admin-btn-primary" onClick={() => setOpen(true)}>
             + إضافة طلب
+          </button>
+          <button className="admin-btn admin-btn-light" onClick={() => void load()}>
+            تحديث
           </button>
           <button className="admin-btn admin-btn-light" onClick={() => window.print()}>
             طباعة

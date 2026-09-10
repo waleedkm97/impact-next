@@ -15,6 +15,12 @@ function formatDate(date: Date) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+function formatDateRange(schedule: Schedule) {
+  const start = formatDate(schedule.startDate);
+  const end = formatDate(schedule.endDate);
+  return start === end ? start : `${start} — ${end}`;
+}
+
 export default function TrainingProgram() {
   const id = useSearchParams().get('id') || '';
   const [course, setCourse] = useState<Course | null>(null);
@@ -165,8 +171,19 @@ export default function TrainingProgram() {
               visibleSchedules.map((schedule) => (
                 <article className="training-schedule-card" key={schedule.id}>
                   <div>
-                    <strong>{formatDate(schedule.startDate)}</strong>
-                    <span>متاح للتسجيل</span>
+                    <strong>{formatDateRange(schedule)}</strong>
+                    <span>
+                      {schedule.city === 'Online' ? 'أونلاين مباشر' : 'حضوري'}
+                      {schedule.startTime && schedule.endTime
+                        ? ` — ${schedule.startTime} إلى ${schedule.endTime}`
+                        : ''}
+                    </span>
+                    {schedule.location && (
+                      <span>{schedule.location}</span>
+                    )}
+                    {schedule.onlineMeetingLink && (
+                      <span>رابط اللقاء متاح بعد التسجيل</span>
+                    )}
                   </div>
                   <div>
                     <strong>{Number(schedule.price ?? 0).toLocaleString('ar-SA')} ر.س</strong>

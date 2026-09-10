@@ -671,9 +671,17 @@ export default function GroupsPage() {
         };
       }
 
-      await groupRepository.updateAssessmentSettings(
+      const assessmentField =
+        type === 'pre'
+          ? 'preAssessment'
+          : type === 'post'
+            ? 'postAssessment'
+            : 'courseEvaluation';
+
+      await groupRepository.setAssessmentForGroup(
         selectedGroup.id,
-        next,
+        assessmentField,
+        next[type].enabled ? 'available' : 'locked',
       );
 
       await load();

@@ -125,6 +125,7 @@ export default function CourseLearningPage() {
 
   const [course, setCourse] = useState<Course | null>(null);
   const [schedule, setSchedule] = useState<CourseSchedule | null>(null);
+  const [currentGroup, setCurrentGroup] = useState<any>(null);
   const [user, setUser] = useState<Trainee | null>(null);
   const [enrollment, setEnrollment] = useState<CourseEnrollment | null>(null);
   const [certificate, setCertificate] = useState<any>(null);
@@ -180,29 +181,30 @@ export default function CourseLearningPage() {
             (item) => item.courseId === currentCourse.id,
           ) ?? null;
 
-        let currentGroup: any = null;
+        let loadedGroup: any = null;
 
         if (currentEnrollment?.groupId) {
-          currentGroup = await groupRepository.findById(
+          loadedGroup = await groupRepository.findById(
             currentEnrollment.groupId,
           );
         }
 
         // بعض التسجيلات القديمة قد لا تحتوي على groupId،
         // لذلك نبحث أيضًا عن المجموعة التي تضم المتدرب ضمن traineeIds.
-        if (!currentGroup) {
+        if (!loadedGroup) {
           const courseGroups = await groupRepository.findAll({
             filter: { courseId: currentCourse.id },
           });
 
-          currentGroup =
+          loadedGroup =
             courseGroups.find((group) =>
               group.traineeIds?.includes(currentUser.id),
             ) ?? null;
         }
 
         if (active) {
-          setGroupMaterialUrl(currentGroup?.materialUrl ?? null);
+          setCurrentGroup(loadedGroup);
+          setGroupMaterialUrl(loadedGroup?.materialUrl ?? null);
         }
 
         if (currentEnrollment) {
@@ -227,20 +229,50 @@ export default function CourseLearningPage() {
           if (active) {
             setSchedule(currentSchedule as CourseSchedule | null);
           }
+        } else if (loadedGroup?.scheduleId) {
+          const groupSchedule = await scheduleRepository.findById(
+            loadedGroup.scheduleId,
+          );
+
+          if (active) {
+            setSchedule(groupSchedule as CourseSchedule | null);
+          }
+        } else if (loadedGroup?.corporateDate) {
+          const startDate = new Date(`${loadedGroup.corporateDate}T00:00:00`);
+          const endDate = new Date(startDate);
+          endDate.setDate(
+            endDate.getDate() + Math.max((currentCourse.days ?? 3) - 1, 0),
+          );
+
+          if (active) {
+            setSchedule({
+              id: `group-${loadedGroup.id}`,
+              courseId: currentCourse.id,
+              startDate,
+              endDate,
+              startTime: '09:00',
+              endTime:
+                loadedGroup.corporateDelivery === 'أونلاين'
+                  ? '12:00'
+                  : '14:00',
+              location:
+                loadedGroup.corporateDelivery === 'أونلاين'
+                  ? undefined
+                  : loadedGroup.corporateLocation,
+              city:
+                loadedGroup.corporateDelivery === 'أونلاين'
+                  ? 'Online'
+                  : loadedGroup.corporateLocation,
+              onlineMeetingLink: currentCourse.meetingLink,
+            } as CourseSchedule);
+          }
         } else {
           const schedules = await scheduleRepository.findByCourseId(
             currentCourse.id,
           );
 
           if (active) {
-            const matchingSchedule =
-              schedules.find(
-                (item) =>
-                  currentEnrollment?.scheduleId &&
-                  item.id === currentEnrollment.scheduleId,
-              ) ?? schedules[0] ?? null;
-
-            setSchedule(matchingSchedule as CourseSchedule | null);
+            setSchedule((schedules[0] as CourseSchedule | undefined) ?? null);
           }
         }
       } catch (error) {

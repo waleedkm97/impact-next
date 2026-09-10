@@ -50,24 +50,50 @@ function schedulePrice(city?: string) {
     if (['لندن', 'برشلونة', 'ميلان'].includes(city ?? '')) return 21000;
     return undefined;
 }
+function validDate(value: unknown, fallback: Date) {
+    const result = new Date(String(value ?? ''));
+    return Number.isNaN(result.getTime()) ? fallback : result;
+}
+
 function normalizeSchedule(s: Schedule): Schedule {
     const city = s.city === 'أونلاين' ? 'Online' : s.city;
-    const startDate = new Date(s.startDate);
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 2);
+    const startDate = validDate(s.startDate, new Date());
+    const defaultEndDate = new Date(startDate);
+    defaultEndDate.setDate(startDate.getDate() + 2);
+    const endDate = validDate(s.endDate, defaultEndDate);
+    const online = city === 'Online';
+
     return {
         ...s,
         city,
         startDate,
         endDate,
-        startTime: city === 'Online' ? '09:00' : '09:00',
-        endTime: city === 'Online' ? '12:00' : '14:00',
-        price: schedulePrice(city) ?? s.price,
-        createdAt: new Date(s.createdAt),
-        updatedAt: new Date(s.updatedAt),
-        confirmationDeadline: s.confirmationDeadline ? new Date(s.confirmationDeadline) : undefined,
-        cancellationDeadline: s.cancellationDeadline ? new Date(s.cancellationDeadline) : undefined,
-        sessions: (s.sessions ?? []).map(x => ({ ...x, date: new Date(x.date) })),
+        startTime:
+            typeof s.startTime === 'string' && s.startTime.trim()
+                ? s.startTime
+                : '09:00',
+        endTime:
+            typeof s.endTime === 'string' && s.endTime.trim()
+                ? s.endTime
+                : online
+                  ? '12:00'
+                  : '14:00',
+        price:
+            typeof s.price === 'number' && Number.isFinite(s.price)
+                ? s.price
+                : schedulePrice(city),
+        createdAt: validDate(s.createdAt, new Date()),
+        updatedAt: validDate(s.updatedAt, new Date()),
+        confirmationDeadline: s.confirmationDeadline
+            ? validDate(s.confirmationDeadline, new Date())
+            : undefined,
+        cancellationDeadline: s.cancellationDeadline
+            ? validDate(s.cancellationDeadline, new Date())
+            : undefined,
+        sessions: (s.sessions ?? []).map(x => ({
+            ...x,
+            date: validDate(x.date, startDate),
+        })),
     };
 }
 async function persist() { await browserDbSet('schedules', schedules); }
@@ -97,8 +123,9 @@ export class ScheduleRepository implements IScheduleRepository {
         const now = new Date();
         const city = input.city === 'أونلاين' ? 'Online' : input.city;
         const startDate = new Date(input.startDate);
-        const endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 2);
+        const defaultEndDate = new Date(startDate);
+        defaultEndDate.setDate(startDate.getDate() + 2);
+        const endDate = input.endDate ? new Date(input.endDate) : defaultEndDate;
         const online = city === 'Online';
         const s: Schedule = {
             ...input,
@@ -106,9 +133,20 @@ export class ScheduleRepository implements IScheduleRepository {
             city,
             startDate,
             endDate,
-            startTime: '09:00',
-            endTime: online ? '12:00' : '14:00',
-            price: schedulePrice(city) ?? input.price,
+            startTime:
+                typeof input.startTime === 'string' && input.startTime.trim()
+                    ? input.startTime
+                    : '09:00',
+            endTime:
+                typeof input.endTime === 'string' && input.endTime.trim()
+                    ? input.endTime
+                    : online
+                      ? '12:00'
+                      : '14:00',
+            price:
+                typeof input.price === 'number' && Number.isFinite(input.price)
+                    ? input.price
+                    : schedulePrice(city),
             createdAt: now,
             updatedAt: now,
             sessions: input.sessions ?? [],
@@ -130,16 +168,28 @@ export class ScheduleRepository implements IScheduleRepository {
         const merged: any = { ...schedules[i], ...input, id, updatedAt: new Date() };
         const city = merged.city === 'أونلاين' ? 'Online' : merged.city;
         const startDate = new Date(merged.startDate);
-        const endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 2);
+        const defaultEndDate = new Date(startDate);
+        defaultEndDate.setDate(startDate.getDate() + 2);
+        const endDate = merged.endDate ? new Date(merged.endDate) : defaultEndDate;
         schedules[i] = {
             ...merged,
             city,
             startDate,
             endDate,
-            startTime: '09:00',
-            endTime: city === 'Online' ? '12:00' : '14:00',
-            price: schedulePrice(city) ?? merged.price,
+            startTime:
+                typeof merged.startTime === 'string' && merged.startTime.trim()
+                    ? merged.startTime
+                    : '09:00',
+            endTime:
+                typeof merged.endTime === 'string' && merged.endTime.trim()
+                    ? merged.endTime
+                    : city === 'Online'
+                      ? '12:00'
+                      : '14:00',
+            price:
+                typeof merged.price === 'number' && Number.isFinite(merged.price)
+                    ? merged.price
+                    : schedulePrice(city),
         };
         await persist();
         return schedules[i];

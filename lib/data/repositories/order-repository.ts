@@ -11,7 +11,7 @@ import {
   browserDbSet,
   migrateLegacyData,
 } from '@/lib/data/browser-db';
-
+import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
 function amount(value: unknown) {
   return Number(String(value ?? 0).replace(/[^0-9.]/g, '')) || 0;
 }
@@ -300,6 +300,18 @@ orderNumber: `IMP-${Date.now()}`,
             groupId: order.customer.groupId,
           },
         );
+
+        if (order.scheduleId) {
+          try {
+            await scheduleRepository.updateParticipantCount(
+              order.scheduleId,
+              1,
+            );
+          } catch {
+            // The enrollment is still valid even if the legacy schedule
+            // record no longer exists.
+          }
+        }
       }
     }
 

@@ -905,8 +905,27 @@ const allRequirementsCompleted =
   }
 
   async getCertificates(id: string) {
-    const trainee = await this.findById(id);
-    return trainee?.certificates ?? [];
+    await ensureHydrated();
+
+    const trainee = trainees.find((item) => item.id === id);
+
+    if (!trainee) {
+      return [];
+    }
+
+    // Keep the trainee-facing certificate views in sync with the same
+    // eligibility rules used by the admin certificate pages.
+    // This is important because the certificate may not have been issued
+    // yet even though the trainee has just completed all requirements.
+    for (const enrollment of trainee.enrollments) {
+      await this.issueCertificateIfEligible(
+        trainee.id,
+        enrollment.id ?? enrollment.courseId,
+      );
+    }
+
+    const refreshed = trainees.find((item) => item.id === id);
+    return refreshed?.certificates ?? [];
   }
 
   async verifyCertificate(number: string) {

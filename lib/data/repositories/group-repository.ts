@@ -280,9 +280,12 @@ export class GroupRepository {
       }
 
       const enrollment = trainee.enrollments.find(
+        (item) => item.groupId === group.id && item.courseId === group.courseId,
+      ) ?? trainee.enrollments.find(
         (item) =>
-          item.groupId === group.id &&
-          item.courseId === group.courseId,
+          item.courseId === group.courseId &&
+          (!group.scheduleId || item.scheduleId === group.scheduleId) &&
+          !item.groupId,
       );
 
       if (!enrollment) {
