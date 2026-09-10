@@ -5,11 +5,13 @@ import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { groupRepository } from '@/lib/data/repositories/group-repository';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
+import { staffRepository } from '@/lib/data/repositories/staff-repository';
 
 import type { Course } from '@/types/course';
 import type { TrainingGroup } from '@/types/group';
 import type { Trainee } from '@/types/trainee';
 import type { Schedule } from '@/types/schedule';
+import type { StaffUser } from '@/types/staff';
 
 type AssessmentKey = 'pre' | 'post' | 'evaluation';
 
@@ -130,6 +132,7 @@ export default function GroupsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
 
   const [selectedCompany, setSelectedCompany] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -144,6 +147,10 @@ export default function GroupsPage() {
     useState<AssessmentKey | null>(null);
 
   const [reportOpen, setReportOpen] = useState(false);
+
+  const [assignmentTrainerId, setAssignmentTrainerId] = useState('');
+  const [assignmentCoordinatorId, setAssignmentCoordinatorId] = useState('');
+  const [savingAssignment, setSavingAssignment] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -167,6 +174,7 @@ export default function GroupsPage() {
       courseList,
       traineeList,
       scheduleList,
+      staffList,
     ] = await Promise.all([
       groupRepository.findAll(),
       courseRepository.findAll(),
@@ -175,6 +183,7 @@ export default function GroupsPage() {
         sort: 'startDate',
         order: 'asc',
       }),
+      staffRepository.findAll(),
     ]);
 
     setGroups(groupList);
@@ -187,6 +196,7 @@ export default function GroupsPage() {
 
     setTrainees(traineeList);
     setSchedules(scheduleList);
+    setStaffUsers(staffList.filter((staff) => staff.status === 'active'));
 
     if (
       selectedCompany &&
@@ -252,6 +262,11 @@ export default function GroupsPage() {
     groups.find(
       (group) => group.id === selectedGroupId,
     ) ?? null;
+
+  useEffect(() => {
+    setAssignmentTrainerId(selectedGroup?.trainerId ?? '');
+    setAssignmentCoordinatorId(selectedGroup?.coordinatorId ?? '');
+  }, [selectedGroupId, selectedGroup?.trainerId, selectedGroup?.coordinatorId]);
 
   const selectedSchedule = selectedGroup
     ? schedules.find(
@@ -555,6 +570,49 @@ export default function GroupsPage() {
     resetForm();
 
     await load();
+  }
+
+  async function saveStaffAssignment() {
+    if (!selectedGroup) return;
+
+    const course = courses.find((item) => item.id === selectedGroup.courseId);
+    if (!course) {
+      alert('تعذر العثور على الدورة المرتبطة بالمجموعة.');
+      return;
+    }
+
+    const trainer = staffUsers.find((staff) => staff.id === assignmentTrainerId);
+    const coordinator = staffUsers.find((staff) => staff.id === assignmentCoordinatorId);
+
+    if (assignmentTrainerId && trainer?.role !== 'trainer') {
+      alert('المدرب المختار غير صالح.');
+      return;
+    }
+
+    if (assignmentCoordinatorId && coordinator?.role !== 'coordinator') {
+      alert('المنسق المختار غير صالح.');
+      return;
+    }
+
+    setSavingAssignment(true);
+
+    try {
+      await groupRepository.update(selectedGroup.id, {
+        trainerId: assignmentTrainerId || undefined,
+        coordinatorId: assignmentCoordinatorId || undefined,
+      });
+
+      await load();
+      alert('تم حفظ المدرب والمنسق للمجموعة.');
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر حفظ تعيين المدرب والمنسق.',
+      );
+    } finally {
+      setSavingAssignment(false);
+    }
   }
 
   async function deleteSelected() {
@@ -1265,6 +1323,16 @@ export default function GroupsPage() {
                       {selectedGroup.responsibleName ||
                         '—'}
                     </span>
+
+                    <span className="admin-tag">
+                      المدرب:{' '}
+                      {staffUsers.find((staff) => staff.id === selectedGroup.trainerId)?.name || '—'}
+                    </span>
+
+                    <span className="admin-tag">
+                      المنسق:{' '}
+                      {staffUsers.find((staff) => staff.id === selectedGroup.coordinatorId)?.name || '—'}
+                    </span>
                   </div>
                 </div>
 
@@ -1313,6 +1381,108 @@ export default function GroupsPage() {
                     }
                   >
                     حذف
+                  </button>
+                </div>
+              </div>
+
+              {/* =========================
+                  STAFF ASSIGNMENT
+                 ========================= */}
+
+              <div
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 12,
+                  padding: 16,
+                  marginBottom: 20,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    marginBottom: 14,
+                  }}
+                >
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 17 }}>
+                      تعيين فريق المجموعة
+                    </h3>
+                    <p
+                      style={{
+                        margin: '4px 0 0',
+                        color: '#6b7280',
+                        fontSize: 13,
+                      }}
+                    >
+                      التعيين هنا خاص بهذه المجموعة فقط، ويمكن تغييره لاحقًا دون تعديل الدورة.
+                    </p>
+                  </div>
+                  <span className="admin-tag">
+                    {assignmentTrainerId || assignmentCoordinatorId
+                      ? 'تم التعيين'
+                      : 'غير معين'}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gap: 12,
+                  }}
+                >
+                  <div className="admin-field">
+                    <label>المدرب</label>
+                    <select
+                      className="admin-select"
+                      value={assignmentTrainerId}
+                      onChange={(event) =>
+                        setAssignmentTrainerId(event.target.value)
+                      }
+                    >
+                      <option value="">بدون تعيين</option>
+                      {staffUsers
+                        .filter((staff) => staff.role === 'trainer')
+                        .map((staff) => (
+                          <option key={staff.id} value={staff.id}>
+                            {staff.name} — {staff.email}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="admin-field">
+                    <label>المنسق</label>
+                    <select
+                      className="admin-select"
+                      value={assignmentCoordinatorId}
+                      onChange={(event) =>
+                        setAssignmentCoordinatorId(event.target.value)
+                      }
+                    >
+                      <option value="">بدون تعيين</option>
+                      {staffUsers
+                        .filter((staff) => staff.role === 'coordinator')
+                        .map((staff) => (
+                          <option key={staff.id} value={staff.id}>
+                            {staff.name} — {staff.email}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-primary"
+                    disabled={savingAssignment}
+                    onClick={() => void saveStaffAssignment()}
+                  >
+                    {savingAssignment ? 'حفظ...' : 'حفظ تعيين المجموعة'}
                   </button>
                 </div>
               </div>

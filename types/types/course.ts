@@ -6,7 +6,6 @@
 export type CourseType = 'recorded' | 'training' | 'public';
 export type CourseDelivery = 'online' | 'in-person' | 'hybrid';
 export type CourseStatus = 'draft' | 'published' | 'archived';
-export type TrainingKind = 'public' | 'corporate';
 
 export interface CourseLesson {
   id: string;
@@ -15,17 +14,17 @@ export interface CourseLesson {
   description?: string;
   type: 'video' | 'quiz' | 'text' | 'interactive';
   order: number;
-  
+
   // Video lesson fields
   videoId?: string;
   videoDuration?: number; // in seconds
-  
+
   // Quiz/Interactive lesson fields
   questions?: LessonQuestion[];
-  
+
   // Lesson sequencing
   afterLessonId?: string; // ID of lesson that must be completed before this one
-  
+
   // Metadata
   createdAt: Date;
   updatedAt: Date;
@@ -62,7 +61,6 @@ export interface CourseSchedule {
 
 export interface CourseAssessment {
   id: string;
-    assessmentType?: 'pre' | 'post' | 'evaluation';
   courseId: string;
   title: string;
   description?: string;
@@ -95,27 +93,26 @@ export interface Course {
   slug: string;
   description: string;
   shortDescription?: string;
-  
+
   // Categorization
   categoryId?: string;
   type: CourseType;
   delivery: CourseDelivery;
-  trainingKind: TrainingKind;
-  
+
   // Location
   cities?: string[];
-  
+
   // Pricing
   price: number;
   oldPrice?: number;
   discount?: number; // Percentage
   currency?: string;
-  
+
   // Duration
   days?: number;
   hours?: number;
   videosCount?: number;
-  
+
   // Content
   objectives: string[];
   outcomes: string[];
@@ -123,39 +120,47 @@ export interface Course {
   lessons?: CourseLesson[];
   schedules?: CourseSchedule[];
   assessments?: CourseAssessment[];
-  
+
   // Target audience
   audience?: string;
   methodology?: string;
-  
+
   // Trainer information
   trainer?: CourseTrainer;
-  
+
+  /**
+   * Staff assigned to this course.
+   *
+   * trainerIds:
+   * Trainers who are allowed/available to deliver this course.
+   *
+   * coordinatorIds:
+   * Coordinators who are responsible for following up
+   * on this course and its related groups.
+   */
+  trainerIds?: string[];
+  coordinatorIds?: string[];
+
   // Materials
   materialUrl?: string;
   meetingLink?: string;
-  
+
   // Media
   image?: string;
   thumbnail?: string;
-  
+
   // Certificate settings
   certificateSettings: CertificateSettings;
-  
-  materialsEnabled?: boolean;
-  preAssessmentEnabled?: boolean;
-  postAssessmentEnabled?: boolean;
-  courseEvaluationEnabled?: boolean;
-  attendanceEnabled?: boolean;
+
   // Status and flags
   featured: boolean;
   published: boolean;
   status: CourseStatus;
-  
+
   // Metadata
   createdAt: Date;
   updatedAt: Date;
-  
+
   // SEO
   metaTitle?: string;
   metaDescription?: string;
@@ -165,7 +170,6 @@ export interface Course {
 export interface CourseFilter {
   type?: CourseType;
   delivery?: CourseDelivery;
-  trainingKind?: TrainingKind;
   categoryId?: string;
   city?: string;
   minPrice?: number;

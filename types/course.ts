@@ -130,6 +130,10 @@ export interface Course {
   
   // Trainer information
   trainer?: CourseTrainer;
+  /** Staff trainers who are allowed/available to deliver this course. */
+  trainerIds?: string[];
+  /** Coordinators who are responsible for this course and its groups. */
+  coordinatorIds?: string[];
   
   // Materials
   materialUrl?: string;

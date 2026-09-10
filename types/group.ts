@@ -1,5 +1,10 @@
 export type GroupType = 'corporate' | 'public';
-export type GroupStatus = 'draft' | 'active' | 'completed' | 'cancelled';
+
+export type GroupStatus =
+  | 'draft'
+  | 'active'
+  | 'completed'
+  | 'cancelled';
 
 export interface AssessmentOpening {
   enabled: boolean;
@@ -27,6 +32,7 @@ export interface TrainingGroup {
   corporateDate?: string;
   corporateDelivery?: 'حضوري' | 'أونلاين';
   corporateLocation?: string;
+
   materialUrl?: string;
 
   companyName?: string;
@@ -34,9 +40,23 @@ export interface TrainingGroup {
   responsibleEmail?: string;
   responsiblePhone?: string;
 
+  /*
+   * الموظفون المسؤولون عن متابعة المجموعة.
+   *
+   * trainerId:
+   * المدرب المسؤول عن تنفيذ التدريب.
+   *
+   * coordinatorId:
+   * المنسق المسؤول عن متابعة المدرب والمجموعة
+   * والمتدربين.
+   */
+  trainerId?: string;
+  coordinatorId?: string;
+
   traineeIds: string[];
 
   maxParticipants?: number;
+
   notes?: string;
 
   /**
@@ -55,13 +75,19 @@ export interface GroupFilter {
   status?: GroupStatus;
   courseId?: string;
   companyName?: string;
+  trainerId?: string;
+  coordinatorId?: string;
   searchQuery?: string;
 }
 
 export interface GroupQuery {
   filter?: GroupFilter;
+
   sort?: 'createdAt' | 'name';
+
   order?: 'asc' | 'desc';
+
   limit?: number;
+
   offset?: number;
 }

@@ -4,6 +4,8 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { categoryRepository } from '@/lib/data/repositories/category-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
+import { staffRepository } from '@/lib/data/repositories/staff-repository';
+import type { StaffUser } from '@/types/staff';
 import type {
   Course,
   CourseAssessment,
@@ -65,11 +67,12 @@ const emptyForm = {
   title: '',
   categoryId: '',
   trainer: '',
+  trainerIds: [] as string[],
+  coordinatorIds: [] as string[],
   price: '',
   description: '',
   objectives: '',
   audience: '',
-  materialUrl: '',
   materials: true,
   pre: true,
   post: true,
@@ -247,6 +250,7 @@ function normalizeEvaluationAssessment(
 export default function ProgramsAdmin() {
   const [programs, setPrograms] = useState<Course[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'all' | 'published' | 'draft'>('all');
 
@@ -277,13 +281,19 @@ export default function ProgramsAdmin() {
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
 
   async function load() {
-    const [courses, cats] = await Promise.all([
+    const [courses, cats, staff] = await Promise.all([
       courseRepository.findByType('training'),
       categoryRepository.findAll({ sort: 'name', order: 'asc' }),
+      staffRepository.findAll({
+        filter: { status: 'active' },
+        sort: 'name',
+        order: 'asc',
+      }),
     ]);
 
     setPrograms(courses);
     setCategories(cats);
+    setStaffUsers(staff);
   }
 
   useEffect(() => {
@@ -311,19 +321,6 @@ export default function ProgramsAdmin() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function readMaterialFile(file: File) {
-    if (file.type !== 'application/pdf') {
-      alert('يرجى اختيار ملف PDF فقط.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFormValue('materialUrl', String(reader.result || ''));
-    };
-    reader.readAsDataURL(file);
-  }
-
   function addCourse() {
     setEditing(null);
     setForm({ ...emptyForm });
@@ -337,11 +334,12 @@ export default function ProgramsAdmin() {
       title: course.title,
       categoryId: course.categoryId ?? '',
       trainer: course.trainer?.name ?? '',
+      trainerIds: course.trainerIds ?? [],
+      coordinatorIds: course.coordinatorIds ?? [],
       price: String(course.price ?? ''),
       description: course.description ?? '',
       objectives: (course.objectives ?? []).join('\n'),
       audience: course.audience ?? '',
-      materialUrl: course.materialUrl ?? '',
       materials: course.materialsEnabled !== false,
       pre: course.preAssessmentEnabled !== false,
       post: course.postAssessmentEnabled !== false,
@@ -388,11 +386,14 @@ export default function ProgramsAdmin() {
       schedules: existing?.schedules ?? [],
       assessments: existing?.assessments ?? [],
       audience: form.audience,
-      materialUrl: form.materialUrl || undefined,
       trainer: {
-        id: existing?.trainer?.id ?? makeId('trainer'),
-        name: form.trainer,
+        id: form.trainerIds[0] ?? existing?.trainer?.id ?? makeId('trainer'),
+        name:
+          staffUsers.find((staff) => staff.id === form.trainerIds[0])?.name ??
+          form.trainer,
       },
+      trainerIds: form.trainerIds,
+      coordinatorIds: form.coordinatorIds,
       featured: form.featured,
       published: form.published,
       status: form.published ? 'published' : 'draft',
@@ -1264,14 +1265,79 @@ export default function ProgramsAdmin() {
                 </select>
               </Field>
 
-              <Field label="المدرب">
-                <input
-                  className="admin-input"
-                  value={form.trainer}
-                  onChange={(event) =>
-                    setFormValue('trainer', event.target.value)
-                  }
-                />
+              <Field label="المدرب الأساسي">
+                <select
+                  className="admin-select"
+                  value={form.trainerIds[0] ?? ''}
+                  onChange={(event) => {
+                    const trainerId = event.target.value;
+                    const trainer = staffUsers.find((staff) => staff.id === trainerId);
+                    setForm((current) => ({
+                      ...current,
+                      trainerIds: trainerId ? [trainerId] : [],
+                      trainer: trainer?.name ?? '',
+                    }));
+                  }}
+                >
+                  <option value="">اختر المدرب الأساسي</option>
+                  {staffUsers
+                    .filter((staff) => staff.role === 'trainer')
+                    .map((staff) => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.name} — {staff.email}
+                      </option>
+                    ))}
+                </select>
+                <small>يمكن لاحقًا إسناد المدرب الفعلي للمجموعة أو الطلب من قائمة المدربين المرتبطين بالدورة.</small>
+              </Field>
+
+              <Field label="المنسقون المرتبطون بالدورة" full>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: 10,
+                    padding: 12,
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 10,
+                    background: '#f8fafc',
+                  }}
+                >
+                  {staffUsers.filter((staff) => staff.role === 'coordinator').length === 0 ? (
+                    <small>لا يوجد منسقون نشطون حاليًا.</small>
+                  ) : (
+                    staffUsers
+                      .filter((staff) => staff.role === 'coordinator')
+                      .map((staff) => {
+                        const checked = form.coordinatorIds.includes(staff.id);
+                        return (
+                          <label
+                            key={staff.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  coordinatorIds: checked
+                                    ? current.coordinatorIds.filter((id) => id !== staff.id)
+                                    : [...current.coordinatorIds, staff.id],
+                                }))
+                              }
+                            />
+                            <span>{staff.name}</span>
+                          </label>
+                        );
+                      })
+                  )}
+                </div>
               </Field>
 
               <Field label="عدد الأيام">
@@ -1302,29 +1368,6 @@ export default function ProgramsAdmin() {
                     setFormValue('audience', event.target.value)
                   }
                 />
-              </Field>
-
-              <Field label="المادة التدريبية PDF" full>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <input
-                    className="admin-input"
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) readMaterialFile(file);
-                    }}
-                  />
-                  {form.materialUrl ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <span style={{ color: '#067647', fontWeight: 700, fontSize: 13 }}>تم تحديد المادة التدريبية PDF.</span>
-                      <a href={form.materialUrl} target="_blank" rel="noreferrer" className="admin-btn admin-btn-light" style={{ textDecoration: 'none' }}>معاينة المادة</a>
-                      <button type="button" className="admin-btn admin-btn-light" onClick={() => setFormValue('materialUrl', '')}>إزالة المادة</button>
-                    </div>
-                  ) : (
-                    <small>المادة العامة للبرنامج تظهر لجميع المتدربين، ويمكن استبدالها بمادة خاصة على مستوى المجموعة.</small>
-                  )}
-                </div>
               </Field>
 
               <Field label="الوصف" full>
@@ -2085,10 +2128,10 @@ export default function ProgramsAdmin() {
                   />
                 </Field>
               ) : (
-                <Field label="رابط حضور الدورة أونلاين">
+                <Field label="رابط Zoom">
                   <input
                     className="admin-input"
-                    placeholder="Zoom أو Microsoft Teams أو أي رابط حضور"
+                    placeholder="يظهر للمشارك بعد التسجيل"
                     value={scheduleForm.meeting}
                     onChange={(event) =>
                       setScheduleForm({
@@ -2133,7 +2176,6 @@ export default function ProgramsAdmin() {
                   <th>التاريخ</th>
                   <th>التنفيذ</th>
                   <th>المدينة</th>
-                  <th>رابط الحضور</th>
                   <th>السعر</th>
                   <th>الإجراءات</th>
                 </tr>
@@ -2149,14 +2191,11 @@ export default function ProgramsAdmin() {
                     <tr key={schedule.id}>
                       <td>{formatDate(schedule.startDate)}</td>
                       <td>
-                        {schedule.onlineMeetingLink ? 'أونلاين' : 'حضوري'}
+                        {schedule.city === 'Online'
+                          ? 'Online'
+                          : 'حضوري'}
                       </td>
                       <td>{schedule.city || '—'}</td>
-                      <td>
-                        {schedule.onlineMeetingLink ? (
-                          <a href={schedule.onlineMeetingLink} target="_blank" rel="noopener noreferrer" className="admin-btn admin-btn-light">فتح الرابط</a>
-                        ) : '—'}
-                      </td>
                       <td>
                         {Number(schedule.price || 0).toLocaleString(
                           'ar-SA',
@@ -2185,7 +2224,7 @@ export default function ProgramsAdmin() {
                 {schedules.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       style={{
                         textAlign: 'center',
                         padding: 25,

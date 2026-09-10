@@ -77,7 +77,7 @@ export default function HomePage() {
       <style jsx>{`
         .homepage {
           background: #ffffff;
-          color: #27313D
+          color: #0B2E67
         }
 
         .section {
@@ -98,7 +98,7 @@ export default function HomePage() {
               rgba(162, 115, 48, 0.12),
               transparent 30%
             ),
-            linear-gradient(135deg, #faf8f5 0%, #ffffff 55%, #f7f2ed 100%);
+            linear-gradient(135deg, #F7F9FC 0%, #ffffff 55%, #F2F6FA 100%);
           min-height: 610px;
           display: flex;
           align-items: center;
@@ -118,7 +118,7 @@ export default function HomePage() {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          color: #B48732
+          color: #B58A3A;
           font-size: 14px;
           font-weight: 800;
           letter-spacing: 0.5px;
@@ -129,7 +129,7 @@ export default function HomePage() {
           content: '';
           width: 28px;
           height: 2px;
-          background: #B48732;
+          background: #B58A3A;
         }
 
         .hero h1 {
@@ -139,11 +139,11 @@ export default function HomePage() {
           line-height: 1.12;
           font-weight: 900;
           letter-spacing: -1.5px;
-          color: #27313D;
+          color: #0B2E67;
         }
 
         .hero h1 span {
-          color: #B48732;
+          color: #B58A3A;
         }
 
         .hero-text {
@@ -151,7 +151,7 @@ export default function HomePage() {
           margin: 26px 0 0;
           font-size: 19px;
           line-height: 2;
-          color: #6d6266;
+          color: #667085;
         }
 
         .hero-actions {
@@ -179,7 +179,7 @@ export default function HomePage() {
         }
 
         .btn-primary {
-          background: #27313D;
+          background: #0B2E67;
           color: #ffffff;
           box-shadow: 0 10px 24px rgba(39, 49, 61, 0.16);
         }
@@ -190,14 +190,14 @@ export default function HomePage() {
         }
 
         .btn-secondary {
-          border: 1px solid #d9d0ca;
+          border: 1px solid #D7DFEA;
           background: #ffffff;
-          color: #27313D;
+          color: #0B2E67;
         }
 
         .btn-secondary:hover {
           transform: translateY(-2px);
-          border-color: #B48732;
+          border-color: #B58A3A;
         }
 
         .hero-visual {
@@ -213,7 +213,7 @@ export default function HomePage() {
           width: min(440px, 100%);
           min-height: 340px;
           border-radius: 28px;
-          background: #27313D;
+          background: #0B2E67;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -293,7 +293,7 @@ export default function HomePage() {
         .stat {
           padding: 25px;
           text-align: center;
-          border-left: 1px solid #eee7e2;
+          border-left: 1px solid #E7ECF3;
         }
 
         .stat:last-child {
@@ -302,7 +302,7 @@ export default function HomePage() {
 
         .stat strong {
           display: block;
-          color: #27313D;
+          color: #0B2E67;
           font-size: 30px;
           font-weight: 900;
         }
@@ -310,7 +310,7 @@ export default function HomePage() {
         .stat span {
           display: block;
           margin-top: 5px;
-          color: #817579;
+          color: #7A8496;
           font-size: 13px;
         }
 
@@ -326,19 +326,19 @@ export default function HomePage() {
           margin: 0;
           font-size: clamp(28px, 4vw, 40px);
           line-height: 1.25;
-          color: #27313D;
+          color: #0B2E67;
         }
 
         .section-header p {
           max-width: 520px;
           margin: 10px 0 0;
-          color: #756a6e;
+          color: #667085;
           line-height: 1.9;
         }
 
         .section-link {
           flex-shrink: 0;
-          color: #B48732;
+          color: #B58A3A;
           font-size: 14px;
           font-weight: 800;
           text-decoration: none;
@@ -361,7 +361,7 @@ export default function HomePage() {
         .course-card {
           overflow: hidden;
           background: #ffffff;
-          border: 1px solid #eee8e3;
+          border: 1px solid #E7ECF3;
           border-radius: 16px;
           box-shadow: 0 8px 28px rgba(39, 49, 61, 0.05);
           transition:
@@ -415,14 +415,14 @@ export default function HomePage() {
         }
 
         .course-type {
-          color: #B48732;
+          color: #B58A3A;
           font-size: 12px;
           font-weight: 800;
         }
 
         .course-title {
           margin: 9px 0 10px;
-          color: #27313D;
+          color: #0B2E67;
           font-size: 19px;
           line-height: 1.55;
           font-weight: 850;
@@ -431,7 +431,7 @@ export default function HomePage() {
         .course-description {
           min-height: 48px;
           margin: 0;
-          color: #776c70;
+          color: #667085;
           font-size: 13px;
           line-height: 1.8;
         }
@@ -446,15 +446,15 @@ export default function HomePage() {
         .course-meta span {
           padding: 6px 9px;
           border-radius: 7px;
-          background: #f8f5f2;
-          color: #665a5e;
+          background: #F6F8FB;
+          color: #5D687A;
           font-size: 11px;
         }
 
         .course-footer {
           margin-top: 20px;
           padding-top: 16px;
-          border-top: 1px solid #eee8e3;
+          border-top: 1px solid #E7ECF3;
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -462,7 +462,7 @@ export default function HomePage() {
         }
 
         .course-price {
-          color: #27313D;
+          color: #0B2E67;
           font-size: 17px;
           font-weight: 900;
         }
@@ -470,13 +470,13 @@ export default function HomePage() {
         .course-price small {
           display: block;
           margin-bottom: 2px;
-          color: #918487;
+          color: #8A94A6;
           font-size: 10px;
           font-weight: 500;
         }
 
         .course-button {
-          color: #B48732;
+          color: #B58A3A;
           font-size: 13px;
           font-weight: 800;
           text-decoration: none;
@@ -489,14 +489,14 @@ export default function HomePage() {
         .empty-state {
           padding: 50px 25px;
           text-align: center;
-          border: 1px dashed #ddd3cc;
+          border: 1px dashed #D7DFEA;
           border-radius: 16px;
-          color: #817579;
+          color: #7A8496;
           grid-column: 1 / -1;
         }
 
         .services-section {
-          background: #f8f5f2;
+          background: #F6F8FB;
         }
 
         .services-grid {
@@ -507,13 +507,13 @@ export default function HomePage() {
 
         .service-card {
           background: #ffffff;
-          border: 1px solid #eee8e3;
+          border: 1px solid #E7ECF3;
           border-radius: 14px;
           padding: 28px 22px;
         }
 
         .service-number {
-          color: #B48732;
+          color: #B58A3A;
           font-size: 12px;
           font-weight: 900;
         }
@@ -521,12 +521,12 @@ export default function HomePage() {
         .service-card h3 {
           margin: 18px 0 10px;
           font-size: 18px;
-          color: #27313D;
+          color: #0B2E67;
         }
 
         .service-card p {
           margin: 0;
-          color: #766b6f;
+          color: #667085;
           font-size: 13px;
           line-height: 1.9;
         }
@@ -544,14 +544,14 @@ export default function HomePage() {
 
         .why-copy h2 {
           margin: 0;
-          color: #27313D;
+          color: #0B2E67;
           font-size: clamp(30px, 4vw, 44px);
           line-height: 1.3;
         }
 
         .why-copy > p {
           margin: 20px 0 0;
-          color: #756a6e;
+          color: #667085;
           line-height: 2;
         }
 
@@ -566,7 +566,7 @@ export default function HomePage() {
           align-items: flex-start;
           gap: 13px;
           padding: 14px 0;
-          border-bottom: 1px solid #eee8e3;
+          border-bottom: 1px solid #E7ECF3;
         }
 
         .benefit-mark {
@@ -574,8 +574,8 @@ export default function HomePage() {
           width: 28px;
           height: 28px;
           border-radius: 50%;
-          background: #f4ede5;
-          color: #B48732;
+          background: #EEF2F7;
+          color: #B58A3A;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -585,14 +585,14 @@ export default function HomePage() {
 
         .benefit strong {
           display: block;
-          color: #27313D;
+          color: #0B2E67;
           font-size: 14px;
         }
 
         .benefit span {
           display: block;
           margin-top: 4px;
-          color: #817579;
+          color: #7A8496;
           font-size: 12px;
         }
 
@@ -600,7 +600,7 @@ export default function HomePage() {
           min-height: 390px;
           padding: 42px;
           border-radius: 24px;
-          background: #27313D;
+          background: #0B2E67;
           color: #ffffff;
           display: flex;
           flex-direction: column;
@@ -609,15 +609,16 @@ export default function HomePage() {
         }
 
         .why-panel small {
-          color: #caa76e;
+          color: #D8B56A;
           font-weight: 800;
         }
 
         .why-panel h3 {
-          margin: 15px 0;
-          font-size: 30px;
-          line-height: 1.4;
-        }
+  margin: 15px 0;
+  font-size: 30px;
+  line-height: 1.4;
+  color: #ffffff;
+}
 
         .why-panel p {
           margin: 0;
@@ -637,9 +638,9 @@ export default function HomePage() {
           background:
             linear-gradient(
               135deg,
-              #27313D 0%,
-              #4b3640 60%,
-              #5b424d 100%
+              #0B2E67 0%,
+              #163F80 60%,
+              #1E4A8F 100%
             );
           color: #ffffff;
           display: flex;
@@ -669,7 +670,7 @@ export default function HomePage() {
           padding: 0 27px;
           border-radius: 10px;
           background: #ffffff;
-          color: #27313D;
+          color: #0B2E67;
           text-decoration: none;
           font-size: 14px;
           font-weight: 900;
@@ -680,7 +681,7 @@ export default function HomePage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #817579;
+          color: #7A8496;
           grid-column: 1 / -1;
         }
 
@@ -770,7 +771,7 @@ export default function HomePage() {
 
           .stat {
             border-left: 0;
-            border-bottom: 1px solid #eee7e2;
+            border-bottom: 1px solid #E7ECF3;
           }
 
           .stat:last-child {
@@ -1090,10 +1091,6 @@ function CourseCard({ course }: { course: Course }) {
         ? `${course.hours} ساعة`
         : null;
 
-  const price =
-    typeof course.price === 'number' && course.price > 0
-      ? `${course.price.toLocaleString('ar-SA')} ر.س`
-      : 'يحدد لاحقًا';
 
   return (
     <article className="course-card">
@@ -1129,11 +1126,6 @@ function CourseCard({ course }: { course: Course }) {
         </div>
 
         <div className="course-footer">
-          <div className="course-price">
-            <small>السعر</small>
-            {price}
-          </div>
-
           <Link href={href} className="course-button">
             عرض التفاصيل
           </Link>

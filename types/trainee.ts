@@ -58,6 +58,8 @@ export interface CourseEnrollment {
   enrolledAt: Date;
   scheduleId?: string;
   groupId?: string;
+  trainerId?: string;
+coordinatorId?: string;
   completedAt?: Date;
   status: 'active' | 'completed' | 'dropped' | 'expired';
   progress: number;
