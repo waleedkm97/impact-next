@@ -6,12 +6,6 @@ import type {
   StaffUser,
 } from '@/types/staff';
 
-import { browserDbGet, browserDbSet } from '@/lib/data/browser-db';
-
-function now() {
-  return new Date();
-}
-
 function normalizeDate(value: unknown, fallback = new Date()) {
   const result =
     value instanceof Date
@@ -19,12 +13,6 @@ function normalizeDate(value: unknown, fallback = new Date()) {
       : new Date(String(value ?? ''));
 
   return Number.isNaN(result.getTime()) ? fallback : result;
-}
-
-function createStaffId() {
-  return `staff-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
 }
 
 function normalizeStaff(user: StaffUser): StaffUser {
@@ -58,69 +46,6 @@ function normalizeStaff(user: StaffUser): StaffUser {
       ? normalizeDate(user.lastLoginAt)
       : undefined,
   };
-}
-
-function cloneStaff(user: StaffUser): StaffUser {
-  return {
-    ...normalizeStaff(user),
-    assignedGroupIds: [...user.assignedGroupIds],
-  };
-}
-
-let staffUsers: StaffUser[] = [];
-
-let hydrated = false;
-
-let hydration: Promise<void> | null = null;
-
-async function persist() {
-  await browserDbSet('staffUsers', staffUsers);
-}
-
-async function ensureHydrated() {
-  if (hydrated) {
-    return;
-  }
-
-  if (!hydration) {
-    hydration = (async () => {
-      const saved =
-        await browserDbGet<StaffUser[]>('staffUsers');
-
-      if (saved !== null) {
-        staffUsers = saved.map(normalizeStaff);
-      } else {
-        /*
-         * حساب المدير الافتراضي.
-         *
-         * يمكنك تغيير البريد وكلمة المرور لاحقًا
-         * من صفحة إدارة المستخدمين.
-         */
-        staffUsers = [
-          {
-            id: 'staff-admin-1',
-            name: 'مدير النظام',
-            email: 'admin@impact.sa',
-            phone: '',
-            passwordHash: 'admin123',
-            role: 'admin',
-            status: 'active',
-            assignedGroupIds: [],
-            createdAt: now(),
-            updatedAt: now(),
-          },
-        ];
-
-        await persist();
-      }
-
-      hydrated = true;
-    })().catch(() => {
-      hydrated = true;
-    });
-  }
-
-  await hydration;
 }
 
 function matches(
@@ -165,49 +90,109 @@ function matches(
   return true;
 }
 
+async function parseResponse<T>(
+  response: Response,
+): Promise<T> {
+  const result = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(
+      result.error || 'حدث خطأ في الاتصال بقاعدة البيانات.',
+    );
+  }
+
+  return result;
+}
+
 export class StaffRepository {
   async refresh() {
-    hydrated = false;
-    hydration = null;
-
-    await ensureHydrated();
+    // PostgreSQL is the source of truth.
+    // No local hydration is required.
   }
 
   async findById(id: string) {
-    await ensureHydrated();
-
-    const user = staffUsers.find(
-      (item) => item.id === id,
+    const response = await fetch(
+      `/api/staff/${encodeURIComponent(id)}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+      },
     );
 
-    return user ? cloneStaff(user) : null;
+    if (response.status === 404) {
+      return null;
+    }
+
+    const result = await parseResponse<{
+      success: true;
+      user: StaffUser;
+    }>(response);
+
+    return normalizeStaff(result.user);
   }
 
   async findByEmail(email: string) {
-    await ensureHydrated();
-
     const normalizedEmail =
       email.trim().toLowerCase();
 
-    const user = staffUsers.find(
-      (item) =>
-        item.email.trim().toLowerCase() ===
-        normalizedEmail,
+    const response = await fetch(
+      `/api/staff?email=${encodeURIComponent(normalizedEmail)}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+      },
     );
 
-    return user ? cloneStaff(user) : null;
+    const result = await parseResponse<{
+      success: true;
+      users: StaffUser[];
+      count: number;
+    }>(response);
+
+    const user = result.users[0];
+
+    return user ? normalizeStaff(user) : null;
   }
 
   async findAll(query?: StaffQuery) {
-    await ensureHydrated();
+    const params = new URLSearchParams();
 
-    let result = staffUsers.filter((user) =>
-      matches(user, query),
+    const filter = query?.filter;
+
+    if (filter?.role) {
+      params.set('role', filter.role);
+    }
+
+    if (filter?.status) {
+      params.set('status', filter.status);
+    }
+
+    if (filter?.searchQuery) {
+      params.set(
+        'search',
+        filter.searchQuery.trim(),
+      );
+    }
+
+    const response = await fetch(
+      `/api/staff?${params.toString()}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+      },
     );
+
+    const result = await parseResponse<{
+      success: true;
+      users: StaffUser[];
+      count: number;
+    }>(response);
+
+    let users = result.users.map(normalizeStaff);
 
     const order = query?.order ?? 'desc';
 
-    result.sort((a, b) => {
+    users.sort((a, b) => {
       let value =
         a.createdAt.getTime() -
         b.createdAt.getTime();
@@ -237,9 +222,9 @@ export class StaffRepository {
         ? offset + query.limit
         : undefined;
 
-    return result
-      .slice(offset, end)
-      .map(cloneStaff);
+    return users
+      .filter((user) => matches(user, query))
+      .slice(offset, end);
   }
 
   async create(input: {
@@ -251,30 +236,11 @@ export class StaffRepository {
     status?: StaffStatus;
     assignedGroupIds?: string[];
   }) {
-    await ensureHydrated();
-
-    const email =
-      input.email.trim().toLowerCase();
-
-    const existing = staffUsers.find(
-      (user) =>
-        user.email.trim().toLowerCase() ===
-        email,
-    );
-
-    if (existing) {
-      throw new Error(
-        'يوجد مستخدم بهذا البريد الإلكتروني.',
-      );
-    }
-
     if (!input.name.trim()) {
-      throw new Error(
-        'اسم المستخدم مطلوب.',
-      );
+      throw new Error('اسم المستخدم مطلوب.');
     }
 
-    if (!email) {
+    if (!input.email.trim()) {
       throw new Error(
         'البريد الإلكتروني مطلوب.',
       );
@@ -286,36 +252,39 @@ export class StaffRepository {
       );
     }
 
-    const timestamp = now();
+    const response = await fetch('/api/staff', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: input.name.trim(),
+        email: input.email.trim().toLowerCase(),
+        phone: input.phone?.trim() || undefined,
+        password: input.password,
+        role: input.role,
+        status: input.status ?? 'active',
+      }),
+    });
 
-    const user: StaffUser = {
-      id: createStaffId(),
+    const result = await parseResponse<{
+      success: true;
+      user: StaffUser;
+    }>(response);
 
-      name: input.name.trim(),
+    let user = normalizeStaff(result.user);
 
-      email,
+    if (
+      input.assignedGroupIds &&
+      input.assignedGroupIds.length > 0
+    ) {
+      user = await this.assignGroups(
+        user.id,
+        input.assignedGroupIds,
+      );
+    }
 
-      phone: input.phone?.trim() || undefined,
-
-      passwordHash: input.password,
-
-      role: input.role,
-
-      status: input.status ?? 'active',
-
-      assignedGroupIds:
-        input.assignedGroupIds ?? [],
-
-      createdAt: timestamp,
-
-      updatedAt: timestamp,
-    };
-
-    staffUsers.push(user);
-
-    await persist();
-
-    return cloneStaff(user);
+    return user;
   }
 
   async update(
@@ -329,90 +298,36 @@ export class StaffRepository {
       >
     >,
   ) {
-    await ensureHydrated();
-
-    const index = staffUsers.findIndex(
-      (user) => user.id === id,
+    const response = await fetch(
+      `/api/staff/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
     );
 
-    if (index < 0) {
-      throw new Error(
-        'المستخدم غير موجود.',
-      );
-    }
+    const result = await parseResponse<{
+      success: true;
+      user: StaffUser;
+    }>(response);
 
-    if (input.email) {
-      const email =
-        input.email.trim().toLowerCase();
-
-      const duplicate = staffUsers.find(
-        (user) =>
-          user.id !== id &&
-          user.email
-            .trim()
-            .toLowerCase() === email,
-      );
-
-      if (duplicate) {
-        throw new Error(
-          'يوجد مستخدم آخر بهذا البريد الإلكتروني.',
-        );
-      }
-
-      input.email = email;
-    }
-
-    staffUsers[index] = {
-      ...staffUsers[index],
-      ...input,
-      updatedAt: now(),
-    };
-
-    await persist();
-
-    return cloneStaff(
-      staffUsers[index],
-    );
+    return normalizeStaff(result.user);
   }
 
   async delete(id: string) {
-    await ensureHydrated();
+    const response = await fetch(
+      `/api/staff/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+      },
+    );
 
-    const user =
-      staffUsers.find(
-        (item) => item.id === id,
-      );
-
-    if (!user) {
-      throw new Error(
-        'المستخدم غير موجود.',
-      );
-    }
-
-    /*
-     * لا نسمح بحذف آخر مدير.
-     */
-    if (user.role === 'admin') {
-      const adminCount =
-        staffUsers.filter(
-          (item) =>
-            item.role === 'admin' &&
-            item.status !== 'inactive',
-        ).length;
-
-      if (adminCount <= 1) {
-        throw new Error(
-          'لا يمكن حذف آخر مدير في النظام.',
-        );
-      }
-    }
-
-    staffUsers =
-      staffUsers.filter(
-        (item) => item.id !== id,
-      );
-
-    await persist();
+    await parseResponse<{
+      success: true;
+    }>(response);
   }
 
   async updatePassword(
@@ -425,7 +340,7 @@ export class StaffRepository {
       );
     }
 
-    await this.update(id, {
+    return this.update(id, {
       passwordHash: password,
     });
   }
@@ -434,8 +349,7 @@ export class StaffRepository {
     email: string,
     password: string,
   ) {
-    const user =
-      await this.findByEmail(email);
+    const user = await this.findByEmail(email);
 
     if (!user) {
       return false;
@@ -452,66 +366,32 @@ export class StaffRepository {
     email: string,
     password: string,
   ) {
-    await ensureHydrated();
+    const user = await this.findByEmail(email);
 
-    const normalizedEmail =
-      email.trim().toLowerCase();
-
-    const index =
-      staffUsers.findIndex(
-        (user) =>
-          user.email
-            .trim()
-            .toLowerCase() ===
-            normalizedEmail &&
-          user.passwordHash === password &&
-          user.status === 'active',
-      );
-
-    if (index < 0) {
+    if (!user) {
       return null;
     }
 
-    staffUsers[index].lastLoginAt = now();
+    if (user.status !== 'active') {
+      return null;
+    }
 
-    staffUsers[index].updatedAt = now();
+    if (user.passwordHash !== password) {
+      return null;
+    }
 
-    await persist();
-
-    return cloneStaff(
-      staffUsers[index],
-    );
+    return user;
   }
 
   async assignGroups(
     id: string,
     groupIds: string[],
   ) {
-    await ensureHydrated();
-
-    const index =
-      staffUsers.findIndex(
-        (user) => user.id === id,
-      );
-
-    if (index < 0) {
-      throw new Error(
-        'المستخدم غير موجود.',
-      );
-    }
-
-    staffUsers[index].assignedGroupIds =
-      Array.from(
+    return this.update(id, {
+      assignedGroupIds: Array.from(
         new Set(groupIds),
-      );
-
-    staffUsers[index].updatedAt = now();
-
-    await persist();
-
-    return cloneStaff(
-      staffUsers[index],
-    );
+      ),
+    });
   }
 
   async getByRole(role: StaffRole) {
@@ -526,8 +406,7 @@ export class StaffRepository {
   }
 
   async getGroupIds(id: string) {
-    const user =
-      await this.findById(id);
+    const user = await this.findById(id);
 
     return user?.assignedGroupIds ?? [];
   }

@@ -1,0 +1,783 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum StaffRole {
+  admin
+  coordinator
+  trainer
+}
+
+enum StaffStatus {
+  active
+  inactive
+  suspended
+}
+
+enum TraineeStatus {
+  active
+  inactive
+  suspended
+  pending
+}
+
+enum CourseType {
+  recorded
+  training
+  public
+}
+
+enum CourseDelivery {
+  online
+  in_person
+  hybrid
+}
+
+enum TrainingKind {
+  public
+  corporate
+}
+
+enum CourseStatus {
+  draft
+  published
+  archived
+}
+
+enum LessonType {
+  video
+  quiz
+  text
+  interactive
+}
+
+enum AssessmentType {
+  pre
+  post
+  evaluation
+}
+
+enum ScheduleStatus {
+  available
+  full
+  ongoing
+  completed
+  cancelled
+}
+
+enum ScheduleRecurrence {
+  once
+  daily
+  weekly
+  monthly
+}
+
+enum GroupType {
+  corporate
+  public
+}
+
+enum GroupStatus {
+  draft
+  active
+  completed
+  cancelled
+}
+
+enum EnrollmentStatus {
+  active
+  completed
+  dropped
+  expired
+}
+
+enum AssessmentState {
+  locked
+  available
+  completed
+}
+
+enum AttendanceStatus {
+  not_marked
+  present
+  absent
+}
+
+enum OrderType {
+  public
+  corporate
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  processing
+  completed
+  cancelled
+  refunded
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+enum PaymentMethod {
+  credit_card
+  bank_transfer
+  cash
+  online_payment
+}
+
+enum OrderItemType {
+  course
+  training_program
+  service
+}
+
+enum CouponType {
+  percentage
+  fixed
+  free_shipping
+}
+
+enum CouponStatus {
+  active
+  inactive
+  expired
+  exhausted
+}
+
+enum CouponApplicability {
+  all
+  courses
+  services
+  training
+  specific
+}
+
+enum CouponDiscountType {
+  percentage
+  fixed
+}
+
+enum ServiceType {
+  consulting
+  corporate_training
+  assessment
+  leadership_development
+}
+
+enum ServiceStatus {
+  draft
+  published
+  archived
+}
+
+enum ServiceDelivery {
+  on_site
+  remote
+  hybrid
+}
+
+model StaffUser {
+  id                String      @id
+  name              String
+  email             String      @unique
+  phone             String?
+  passwordHash      String
+  role              StaffRole
+  status            StaffStatus @default(active)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  lastLoginAt       DateTime?
+
+  trainerCourses     CourseStaffTrainer[]
+  coordinatorCourses CourseStaffCoordinator[]
+  trainerGroups      TrainingGroup[] @relation("GroupTrainer")
+  coordinatorGroups  TrainingGroup[] @relation("GroupCoordinator")
+  trainerSchedules    Schedule[]     @relation("ScheduleTrainer")
+  coordinatorSchedules Schedule[]    @relation("ScheduleCoordinator")
+  trainerEnrollments CourseEnrollment[] @relation("EnrollmentTrainer")
+  coordinatorEnrollments CourseEnrollment[] @relation("EnrollmentCoordinator")
+
+  @@index([role, status])
+}
+
+model Trainee {
+  id             String        @id
+  firstName      String
+  lastName       String
+  firstNameEnglish String?
+  lastNameEnglish  String?
+  email          String        @unique
+  phone          String?
+  passwordHash   String
+  status         TraineeStatus @default(active)
+  emailVerified  Boolean       @default(false)
+  companyName    String?
+  companyId      String?
+  preferences    Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  lastLoginAt    DateTime?
+
+  enrollments    CourseEnrollment[]
+  progress       CourseProgress[]
+  certificates   Certificate[]
+  orders         Order[]
+  couponUsages   CouponUsage[]
+  groupMemberships GroupTrainee[]
+
+  @@index([status])
+}
+
+model Category {
+  id          String   @id
+  name        String
+  description String?
+  image       String?
+  published   Boolean  @default(true)
+  updatedAt   DateTime @default(now())
+  courses     Course[]
+}
+
+model Course {
+  id                       String        @id
+  title                    String
+  slug                     String        @unique
+  description              String
+  shortDescription         String?
+  categoryId               String?
+  type                     CourseType
+  delivery                 CourseDelivery
+  trainingKind             TrainingKind
+  cities                   String[]
+  price                    Decimal       @db.Decimal(12, 2)
+  oldPrice                 Decimal?      @db.Decimal(12, 2)
+  discount                 Decimal?      @db.Decimal(5, 2)
+  currency                 String        @default("SAR")
+  days                     Int?
+  hours                    Decimal?      @db.Decimal(6, 2)
+  videosCount              Int           @default(0)
+  objectives               String[]
+  outcomes                 String[]
+  outline                  String?
+  audience                 String?
+  methodology              String?
+  materialUrl              String?
+  meetingLink              String?
+  image                    String?
+  thumbnail                String?
+  certificateSettings      Json?
+  materialsEnabled         Boolean       @default(false)
+  preAssessmentEnabled     Boolean       @default(false)
+  postAssessmentEnabled    Boolean       @default(false)
+  courseEvaluationEnabled  Boolean       @default(false)
+  attendanceEnabled        Boolean       @default(false)
+  featured                 Boolean       @default(false)
+  published                Boolean       @default(true)
+  status                   CourseStatus  @default(published)
+  metaTitle                String?
+  metaDescription          String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  category                 Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  lessons                  CourseLesson[]
+  assessments              CourseAssessment[]
+  schedules                Schedule[]
+  groups                   TrainingGroup[]
+  enrollments              CourseEnrollment[]
+  progress                 CourseProgress[]
+  certificates             Certificate[]
+  orderItems               OrderItem[]
+  trainerAssignments       CourseStaffTrainer[]
+  coordinatorAssignments   CourseStaffCoordinator[]
+
+  @@index([categoryId])
+  @@index([trainingKind, status, published])
+}
+
+model CourseStaffTrainer {
+  courseId String
+  staffId  String
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  staff    StaffUser @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, staffId])
+  @@index([staffId])
+}
+
+model CourseStaffCoordinator {
+  courseId String
+  staffId  String
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  staff    StaffUser @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, staffId])
+  @@index([staffId])
+}
+
+model CourseLesson {
+  id             String      @id
+  courseId       String
+  title          String
+  description    String?
+  type           LessonType
+  order          Int
+  videoId        String?
+  videoDuration  Int?
+  afterLessonId  String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  course         Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions      LessonQuestion[]
+
+  @@index([courseId, order])
+}
+
+model LessonQuestion {
+  id             String   @id
+  lessonId       String
+  question       String
+  type           String
+  options        String[]
+  correctAnswer  Json
+  explanation    String?
+  order          Int
+  points          Int?
+
+  lesson         CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, order])
+}
+
+model CourseAssessment {
+  id             String         @id
+  courseId       String
+  assessmentType AssessmentType?
+  title          String
+  description    String?
+  passingScore   Int
+  timeLimit      Int?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  course         Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId, assessmentType])
+}
+
+model Schedule {
+  id                    String             @id
+  courseId              String
+  courseTitle           String
+  title                 String
+  description           String?
+  startDate             DateTime
+  endDate               DateTime
+  startTime             String
+  endTime               String
+  recurrence             ScheduleRecurrence?
+  location              String?
+  city                  String?
+  onlineMeetingLink     String?
+  maxParticipants       Int
+  currentParticipants   Int              @default(0)
+  waitlistMax           Int?
+  currentWaitlist       Int              @default(0)
+  price                 Decimal?         @db.Decimal(12, 2)
+  currency              String?
+  instructorId          String?
+  instructorName        String?
+  trainerId             String?
+  coordinatorId         String?
+  status                ScheduleStatus   @default(available)
+  published             Boolean          @default(true)
+  allowWaitlist         Boolean          @default(false)
+  requireConfirmation   Boolean          @default(false)
+  confirmationDeadline  DateTime?
+  cancellationDeadline  DateTime?
+  cancellationPolicy    String?
+  postAssessmentEnabled Boolean          @default(false)
+  courseEvaluationEnabled Boolean        @default(false)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  course                Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  trainer               StaffUser?       @relation("ScheduleTrainer", fields: [trainerId], references: [id], onDelete: SetNull)
+  coordinator           StaffUser?       @relation("ScheduleCoordinator", fields: [coordinatorId], references: [id], onDelete: SetNull)
+  sessions              ScheduleSession[]
+    enrollments            CourseEnrollment[]
+  orders                 Order[]
+  groups                 TrainingGroup[]
+
+  @@index([courseId, startDate])
+  @@index([trainerId])
+  @@index([coordinatorId])
+}
+
+model ScheduleSession {
+  id                String   @id
+  scheduleId        String
+  date              DateTime
+  startTime         String
+  endTime           String
+  location          String?
+  onlineMeetingLink String?
+  instructorId      String?
+  notes             String?
+
+  schedule          Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId, date])
+}
+
+model TrainingGroup {
+  id                 String      @id
+  name               String
+  type               GroupType
+  status             GroupStatus
+  courseId           String
+  courseTitle        String
+  scheduleId         String?
+  corporateDate      String?
+  corporateDelivery  String?
+  corporateLocation  String?
+  materialUrl        String?
+  companyName        String?
+  responsibleName    String?
+  responsibleEmail   String?
+  responsiblePhone  String?
+  trainerId          String?
+  coordinatorId      String?
+  maxParticipants    Int?
+  notes              String?
+  assessmentSettings Json?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  course             Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  schedule           Schedule?    @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  trainer             StaffUser?  @relation("GroupTrainer", fields: [trainerId], references: [id], onDelete: SetNull)
+  coordinator         StaffUser?  @relation("GroupCoordinator", fields: [coordinatorId], references: [id], onDelete: SetNull)
+  trainees            GroupTrainee[]
+  enrollments         CourseEnrollment[]
+
+  @@index([courseId])
+  @@index([trainerId])
+  @@index([coordinatorId])
+}
+
+model GroupTrainee {
+  groupId   String
+  traineeId String
+  joinedAt  DateTime @default(now())
+
+  group     TrainingGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  trainee   Trainee       @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, traineeId])
+  @@index([traineeId])
+}
+
+model CourseEnrollment {
+  id                       String           @id
+  traineeId                String
+  courseId                 String
+  courseTitle              String
+  enrolledAt               DateTime         @default(now())
+  scheduleId               String?
+  groupId                  String?
+  trainerId                String?
+  coordinatorId            String?
+  completedAt              DateTime?
+  status                   EnrollmentStatus @default(active)
+  progress                 Int              @default(0)
+  lastAccessedAt           DateTime?
+  certificateId            String?
+  preAssessment            AssessmentState?
+  postAssessment           AssessmentState?
+  courseEvaluation         AssessmentState?
+  preAssessmentScore       Decimal?         @db.Decimal(6, 2)
+  postAssessmentScore      Decimal?         @db.Decimal(6, 2)
+  courseEvaluationScore    Decimal?         @db.Decimal(6, 2)
+  preAssessmentAnswers     Json?
+  postAssessmentAnswers    Json?
+  courseEvaluationAnswers  Json?
+  preAssessmentCompletedAt DateTime?
+  postAssessmentCompletedAt DateTime?
+  courseEvaluationCompletedAt DateTime?
+  attendance               AttendanceStatus @default(not_marked)
+  attendanceMode           String?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+
+  trainee                  Trainee          @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  course                   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  schedule                 Schedule?        @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  group                    TrainingGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  trainer                  StaffUser?       @relation("EnrollmentTrainer", fields: [trainerId], references: [id], onDelete: SetNull)
+  coordinator              StaffUser?       @relation("EnrollmentCoordinator", fields: [coordinatorId], references: [id], onDelete: SetNull)
+  progressRecords          CourseProgress[]
+  attendanceDays           AttendanceDay[]
+  certificate              Certificate?     @relation("EnrollmentCertificate")
+
+  @@index([traineeId])
+  @@index([courseId])
+  @@index([groupId])
+  @@index([scheduleId])
+  @@index([trainerId])
+  @@index([coordinatorId])
+  @@unique([traineeId, courseId, scheduleId, groupId])
+}
+
+model CourseProgress {
+  id          String   @id
+  traineeId   String
+  courseId    String
+  enrollmentId String?
+  lessonId    String
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  timeSpent   Int?
+  score       Decimal? @db.Decimal(6, 2)
+  attempts    Int?
+
+  trainee     Trainee          @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollment  CourseEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  @@index([traineeId, courseId])
+  @@index([enrollmentId])
+}
+
+model AttendanceDay {
+  id           String           @id
+  enrollmentId String
+  date         DateTime
+  status       AttendanceStatus
+  markedAt     DateTime?
+
+  enrollment   CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, date])
+  @@index([date])
+}
+
+model Certificate {
+  id               String   @id
+  traineeId         String
+  courseId          String
+  enrollmentId      String?  @unique
+  courseTitle       String
+  issuedAt          DateTime @default(now())
+  certificateNumber String   @unique
+  templateId        String?
+  downloadUrl       String?
+  verified          Boolean  @default(true)
+
+  trainee           Trainee          @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  course            Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollment        CourseEnrollment? @relation("EnrollmentCertificate", fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  @@index([traineeId])
+  @@index([courseId])
+}
+
+model Order {
+  id                 String        @id
+  type               OrderType
+  orderNumber        String        @unique
+  traineeId          String?
+  customerName       String
+  customerEmail      String
+  customerPhone      String?
+  customerCompany    String?
+  companyId          String?
+  groupId            String?
+  responsibleName    String?
+  responsibleEmail   String?
+  responsiblePhone   String?
+  subtotal           Decimal       @db.Decimal(12, 2)
+  discount           Decimal       @db.Decimal(12, 2)
+  tax                Decimal       @db.Decimal(12, 2)
+  total              Decimal       @db.Decimal(12, 2)
+  currency           String        @default("SAR")
+  couponId           String?
+  couponCode         String?
+  couponDiscount     Decimal?      @db.Decimal(12, 2)
+  couponDiscountType CouponDiscountType?
+  paymentMethod      PaymentMethod
+  paymentStatus      PaymentStatus @default(pending)
+  paymentAmount      Decimal       @db.Decimal(12, 2)
+  paymentCurrency    String        @default("SAR")
+  transactionId      String?
+  paidAt             DateTime?
+  paymentGateway     String?
+  paymentMetadata    Json?
+  status             OrderStatus   @default(pending)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  confirmedAt        DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  notes              String?
+  metadata           Json?
+  scheduleId         String?
+  bookingDate        DateTime?
+
+  trainee            Trainee?      @relation(fields: [traineeId], references: [id], onDelete: SetNull)
+  schedule           Schedule?     @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  items              OrderItem[]
+  coupon             Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponUsages       CouponUsage[]
+
+  @@index([traineeId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([scheduleId])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String        @id
+  orderId     String
+  type        OrderItemType
+  itemId      String
+  title       String
+  description String?
+  quantity    Int
+  unitPrice   Decimal       @db.Decimal(12, 2)
+  totalPrice  Decimal       @db.Decimal(12, 2)
+  discount    Decimal?      @db.Decimal(12, 2)
+  metadata    Json?
+
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  course      Course?       @relation(fields: [itemId], references: [id], onDelete: NoAction)
+
+  @@index([orderId])
+  @@index([itemId])
+}
+
+model Coupon {
+  id                    String               @id
+  code                  String               @unique
+  description           String?
+  type                  CouponType
+  value                 Decimal              @db.Decimal(12, 2)
+  currency              String?
+  applicability          CouponApplicability
+  applicableCategoryIds  String[]
+  applicableItemIds     String[]
+  restrictions          Json
+  maxUses               Int?
+  usedCount             Int                  @default(0)
+  maxUsesPerTrainee     Int?
+  startDate             DateTime
+  endDate               DateTime
+  status                CouponStatus         @default(active)
+  autoApply             Boolean              @default(false)
+  stackable             Boolean              @default(false)
+  minimumOrderValue     Decimal?             @db.Decimal(12, 2)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  usages                CouponUsage[]
+  orders                Order[]
+
+  @@index([status, startDate, endDate])
+}
+
+model CouponUsage {
+  id              String   @id
+  couponId        String
+  traineeId       String
+  orderId         String
+  usedAt          DateTime @default(now())
+  discountAmount  Decimal  @db.Decimal(12, 2)
+
+  coupon          Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  trainee         Trainee  @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId])
+  @@index([traineeId])
+  @@index([orderId])
+}
+
+model Service {
+  id                   String          @id
+  title                String
+  slug                 String          @unique
+  description          String
+  shortDescription     String?
+  categoryId           String?
+  type                 ServiceType
+  delivery             ServiceDelivery
+  objectives           String[]
+  outcomes             String[]
+  target               Json
+  basePrice             Decimal        @db.Decimal(12, 2)
+  currency              String         @default("SAR")
+  pricingModel          String
+  pricing              Json?
+  estimatedDuration     String?
+  estimatedHours        Decimal?       @db.Decimal(6, 2)
+  consultantId          String?
+  consultantName        String?
+  consultantBio         String?
+  image                String?
+  thumbnail             String?
+  featured              Boolean        @default(false)
+  published             Boolean        @default(true)
+  status                ServiceStatus  @default(published)
+  metaTitle             String?
+  metaDescription       String?
+  requireConsultation   Boolean        @default(false)
+  consultationForm      String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  deliverables          ServiceDeliverable[]
+
+  @@index([type])
+  @@index([status, published])
+}
+
+model ServiceDeliverable {
+  id              String   @id
+  serviceId       String
+  title           String
+  description     String?
+  estimatedHours  Decimal? @db.Decimal(6, 2)
+  order           Int
+
+  service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, order])
+}
+
+model AppSettings {
+  id         String   @id
+  general    Json
+  contact    Json
+  payment    Json
+  email      Json
+  certificate Json
+  security   Json
+  analytics  Json
+  notifications Json
+  system     Json
+  updatedAt  DateTime @updatedAt
+  updatedBy  String?
+}
