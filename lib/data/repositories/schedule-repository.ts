@@ -78,10 +78,7 @@ function normalizeSchedule(s: Schedule): Schedule {
                 : online
                   ? '12:00'
                   : '14:00',
-        price:
-            typeof s.price === 'number' && Number.isFinite(s.price)
-                ? s.price
-                : schedulePrice(city),
+        price: schedulePrice(city) ?? s.price,
         createdAt: validDate(s.createdAt, new Date()),
         updatedAt: validDate(s.updatedAt, new Date()),
         confirmationDeadline: s.confirmationDeadline

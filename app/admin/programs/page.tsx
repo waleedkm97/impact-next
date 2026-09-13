@@ -4,8 +4,6 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { categoryRepository } from '@/lib/data/repositories/category-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
-import { staffRepository } from '@/lib/data/repositories/staff-repository';
-import type { StaffUser } from '@/types/staff';
 import type {
   Course,
   CourseAssessment,
@@ -67,8 +65,6 @@ const emptyForm = {
   title: '',
   categoryId: '',
   trainer: '',
-  trainerIds: [] as string[],
-  coordinatorIds: [] as string[],
   price: '',
   description: '',
   objectives: '',
@@ -250,7 +246,6 @@ function normalizeEvaluationAssessment(
 export default function ProgramsAdmin() {
   const [programs, setPrograms] = useState<Course[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'all' | 'published' | 'draft'>('all');
 
@@ -281,19 +276,13 @@ export default function ProgramsAdmin() {
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
 
   async function load() {
-    const [courses, cats, staff] = await Promise.all([
+    const [courses, cats] = await Promise.all([
       courseRepository.findByType('training'),
       categoryRepository.findAll({ sort: 'name', order: 'asc' }),
-      staffRepository.findAll({
-        filter: { status: 'active' },
-        sort: 'name',
-        order: 'asc',
-      }),
     ]);
 
     setPrograms(courses);
     setCategories(cats);
-    setStaffUsers(staff);
   }
 
   useEffect(() => {
@@ -334,8 +323,6 @@ export default function ProgramsAdmin() {
       title: course.title,
       categoryId: course.categoryId ?? '',
       trainer: course.trainer?.name ?? '',
-      trainerIds: course.trainerIds ?? [],
-      coordinatorIds: course.coordinatorIds ?? [],
       price: String(course.price ?? ''),
       description: course.description ?? '',
       objectives: (course.objectives ?? []).join('\n'),
@@ -387,13 +374,9 @@ export default function ProgramsAdmin() {
       assessments: existing?.assessments ?? [],
       audience: form.audience,
       trainer: {
-        id: form.trainerIds[0] ?? existing?.trainer?.id ?? makeId('trainer'),
-        name:
-          staffUsers.find((staff) => staff.id === form.trainerIds[0])?.name ??
-          form.trainer,
+        id: existing?.trainer?.id ?? makeId('trainer'),
+        name: form.trainer,
       },
-      trainerIds: form.trainerIds,
-      coordinatorIds: form.coordinatorIds,
       featured: form.featured,
       published: form.published,
       status: form.published ? 'published' : 'draft',
@@ -462,29 +445,30 @@ export default function ProgramsAdmin() {
   }
 
   async function togglePublicScheduleAssessment(type: 'post' | 'evaluation') {
-    if (!selectedAssessmentScheduleId) {
-      alert('اختر موعدًا تدريبيًا أولًا.');
+    if (!assessmentSchedules.length) {
+      alert('لا يوجد موعد تدريبي مرتبط بهذا البرنامج.');
       return;
     }
 
-    const schedule = assessmentSchedules.find(
+    const selectedSchedule = assessmentSchedules.find(
       (item) => item.id === selectedAssessmentScheduleId,
-    );
-    if (!schedule) return;
+    ) ?? assessmentSchedules[0];
 
     const field =
       type === 'post' ? 'postAssessmentEnabled' : 'courseEvaluationEnabled';
-    const nextValue = schedule[field] !== true;
+    const nextValue = selectedSchedule[field] !== true;
 
     setAssessmentAccessSaving(type);
     try {
-      const updated = await scheduleRepository.update(schedule.id, {
-        [field]: nextValue,
-      } as Partial<Schedule>);
-
-      setAssessmentSchedules((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
+      const updatedSchedules = await Promise.all(
+        assessmentSchedules.map((schedule) =>
+          scheduleRepository.update(schedule.id, {
+            [field]: nextValue,
+          } as Partial<Schedule>),
+        ),
       );
+
+      setAssessmentSchedules(updatedSchedules);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'تعذر تحديث إتاحة التقييم.');
     } finally {
@@ -618,9 +602,12 @@ export default function ProgramsAdmin() {
           line.replace(/^(?:[A-D][)\-.]|[أ-د][)\-.])\s+/i, '').trim(),
         );
 
-        const answerLetter = answerValue.match(/^([A-D])$/i)?.[1]?.toUpperCase();
+        const answerLetter = answerValue.match(/^([A-Dأ-د])$/i)?.[1];
         if (answerLetter) {
-          const answerIndex = answerLetter.charCodeAt(0) - 65;
+          const normalizedLetter = answerLetter.toUpperCase();
+          const answerIndex = ['A', 'B', 'C', 'D'].includes(normalizedLetter)
+            ? normalizedLetter.charCodeAt(0) - 65
+            : ['أ', 'ب', 'ج', 'د'].indexOf(answerLetter);
           correctAnswer = options[answerIndex] ?? '';
         }
       } else if (/^(?:صح\s*\/\s*خطأ|صح أو خطأ|true\s*\/\s*false)$/i.test(lines[1] ?? '')) {
@@ -1265,79 +1252,14 @@ export default function ProgramsAdmin() {
                 </select>
               </Field>
 
-              <Field label="المدرب الأساسي">
-                <select
-                  className="admin-select"
-                  value={form.trainerIds[0] ?? ''}
-                  onChange={(event) => {
-                    const trainerId = event.target.value;
-                    const trainer = staffUsers.find((staff) => staff.id === trainerId);
-                    setForm((current) => ({
-                      ...current,
-                      trainerIds: trainerId ? [trainerId] : [],
-                      trainer: trainer?.name ?? '',
-                    }));
-                  }}
-                >
-                  <option value="">اختر المدرب الأساسي</option>
-                  {staffUsers
-                    .filter((staff) => staff.role === 'trainer')
-                    .map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} — {staff.email}
-                      </option>
-                    ))}
-                </select>
-                <small>يمكن لاحقًا إسناد المدرب الفعلي للمجموعة أو الطلب من قائمة المدربين المرتبطين بالدورة.</small>
-              </Field>
-
-              <Field label="المنسقون المرتبطون بالدورة" full>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                    gap: 10,
-                    padding: 12,
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 10,
-                    background: '#f8fafc',
-                  }}
-                >
-                  {staffUsers.filter((staff) => staff.role === 'coordinator').length === 0 ? (
-                    <small>لا يوجد منسقون نشطون حاليًا.</small>
-                  ) : (
-                    staffUsers
-                      .filter((staff) => staff.role === 'coordinator')
-                      .map((staff) => {
-                        const checked = form.coordinatorIds.includes(staff.id);
-                        return (
-                          <label
-                            key={staff.id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 8,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() =>
-                                setForm((current) => ({
-                                  ...current,
-                                  coordinatorIds: checked
-                                    ? current.coordinatorIds.filter((id) => id !== staff.id)
-                                    : [...current.coordinatorIds, staff.id],
-                                }))
-                              }
-                            />
-                            <span>{staff.name}</span>
-                          </label>
-                        );
-                      })
-                  )}
-                </div>
+              <Field label="المدرب">
+                <input
+                  className="admin-input"
+                  value={form.trainer}
+                  onChange={(event) =>
+                    setFormValue('trainer', event.target.value)
+                  }
+                />
               </Field>
 
               <Field label="عدد الأيام">
@@ -1478,9 +1400,9 @@ export default function ProgramsAdmin() {
               className="admin-card"
               style={{ padding: 18, marginBottom: 18, background: '#f8fafc' }}
             >
-              <h3 style={{ marginTop: 0 }}>إتاحة التقييم لمتدربي Public حسب الموعد</h3>
+              <h3 style={{ marginTop: 0 }}>إتاحة التقييم لمتدربي Public</h3>
               <p style={{ color: '#6b7890', marginTop: 0, fontSize: 13 }}>
-                اختر موعدًا محددًا. هذا الإعداد لا يفتح التقييم لباقي مواعيد الدورة.
+                اختر أي موعد للتحكم في إتاحة التقييم. عند الفتح أو الإغلاق يتم تطبيق الإعداد على جميع مواعيد البرنامج.
               </p>
               <div className="admin-form-grid">
                 <Field label="الموعد التدريبي">
@@ -2128,10 +2050,10 @@ export default function ProgramsAdmin() {
                   />
                 </Field>
               ) : (
-                <Field label="رابط Zoom">
+                <Field label="رابط حضور الدورة أونلاين">
                   <input
                     className="admin-input"
-                    placeholder="يظهر للمشارك بعد التسجيل"
+                    placeholder="Zoom أو Microsoft Teams أو أي رابط حضور"
                     value={scheduleForm.meeting}
                     onChange={(event) =>
                       setScheduleForm({
@@ -2176,6 +2098,7 @@ export default function ProgramsAdmin() {
                   <th>التاريخ</th>
                   <th>التنفيذ</th>
                   <th>المدينة</th>
+                  <th>رابط الحضور</th>
                   <th>السعر</th>
                   <th>الإجراءات</th>
                 </tr>
@@ -2191,11 +2114,14 @@ export default function ProgramsAdmin() {
                     <tr key={schedule.id}>
                       <td>{formatDate(schedule.startDate)}</td>
                       <td>
-                        {schedule.city === 'Online'
-                          ? 'Online'
-                          : 'حضوري'}
+                        {schedule.onlineMeetingLink ? 'أونلاين' : 'حضوري'}
                       </td>
                       <td>{schedule.city || '—'}</td>
+                      <td>
+                        {schedule.onlineMeetingLink ? (
+                          <a href={schedule.onlineMeetingLink} target="_blank" rel="noopener noreferrer" className="admin-btn admin-btn-light">فتح الرابط</a>
+                        ) : '—'}
+                      </td>
                       <td>
                         {Number(schedule.price || 0).toLocaleString(
                           'ar-SA',
@@ -2224,7 +2150,7 @@ export default function ProgramsAdmin() {
                 {schedules.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       style={{
                         textAlign: 'center',
                         padding: 25,

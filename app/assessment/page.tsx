@@ -54,19 +54,24 @@ export default function AssessmentPage() {
       );
 
       if (enrollment && type !== 'pre') {
-       if (enrollment.groupId) {
-  const enabled =
-    enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] === 'available' ||
-    enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] === 'completed';
-
-  setPublicScheduleEnabled(enabled);
-
-  if (
-    !enabled &&
-    enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] !== 'completed'
-  ) {
-    setBlockedReason('التقييم مغلق حاليًا من الإدارة لهذه المجموعة.');
-  }
+        if (enrollment.groupId) {
+          const { groupRepository } = await import(
+            '@/lib/data/repositories/group-repository'
+          );
+          const settings = await groupRepository.getAssessmentSettings(
+            enrollment.groupId,
+          );
+          const assessmentSettings =
+            type === 'pre'
+              ? settings?.pre
+              : type === 'post'
+                ? settings?.post
+                : settings?.evaluation;
+          const enabled = Boolean(assessmentSettings?.enabled);
+          setPublicScheduleEnabled(enabled);
+          if (!enabled && enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] !== 'completed') {
+            setBlockedReason('التقييم مغلق حاليًا من الإدارة لهذه المجموعة.');
+          }
         } else if (enrollment.scheduleId) {
           const schedule = await scheduleRepository.findById(enrollment.scheduleId);
           const enabled = type === 'post'
@@ -118,7 +123,9 @@ export default function AssessmentPage() {
     return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>التقييم غير متاح</h1><Link href="/account">العودة إلى الحساب</Link></main>;
   }
 
-  
+  if ((type === 'post' || type === 'evaluation') && Number(enrollment.progress ?? 0) < 100) {
+    return <main dir="rtl" className="container mx-auto max-w-3xl px-6 py-12"><div className="account-empty-state"><h1>{type === 'post' ? 'التقييم البعدي' : 'تقييم الدورة'}</h1><p>يصبح هذا التقييم متاحًا بعد إكمال البرنامج التدريبي.</p><Link className="btn-primary" href={`/course-learning?id=${encodeURIComponent(courseId)}`}>العودة إلى الدورة</Link></div></main>;
+  }
 
   if (state === 'completed') {
     return <main dir="rtl" className="container mx-auto max-w-3xl px-6 py-12"><div className="account-empty-state"><h1>{type === 'pre' ? 'التقييم القبلي' : type === 'post' ? 'التقييم البعدي' : 'تقييم الدورة'}</h1><p>تم إكمال هذا التقييم بنجاح.</p><Link className="btn-primary" href={`/course-learning?id=${encodeURIComponent(courseId)}`}>العودة إلى الدورة</Link></div></main>;

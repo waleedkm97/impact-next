@@ -136,7 +136,40 @@ async function ensureHydrated() { if (hydrated)
     }
     hydrated = true; })().catch(() => { hydrated = true; });
 } await hydration; }
-function normalizeCourse(c: Course): Course { return { ...c, days: c.type === 'training' ? 3 : c.days, createdAt: date(c.createdAt), updatedAt: date(c.updatedAt), lessons: (c.lessons ?? []).map(l => ({ ...l, createdAt: date(l.createdAt), updatedAt: date(l.updatedAt), questions: l.questions?.map(q => ({ ...q })) })), schedules: (c.schedules ?? []).map(s => ({ ...s, startDate: date(s.startDate), endDate: date(s.endDate), createdAt: date(s.createdAt), updatedAt: date(s.updatedAt) })), assessments: (c.assessments ?? []).map(a => ({ ...a, createdAt: date(a.createdAt), updatedAt: date(a.updatedAt) })) }; }
+function normalizeCourse(c: Course): Course {
+    const normalizedPrice =
+        c.type === 'recorded'
+            ? 99
+            : c.delivery === 'online'
+                ? 3000
+                : 5000;
+
+    return {
+        ...c,
+        price: normalizedPrice,
+        days: c.type === 'training' ? 3 : c.days,
+        createdAt: date(c.createdAt),
+        updatedAt: date(c.updatedAt),
+        lessons: (c.lessons ?? []).map((l) => ({
+            ...l,
+            createdAt: date(l.createdAt),
+            updatedAt: date(l.updatedAt),
+            questions: l.questions?.map((q) => ({ ...q })),
+        })),
+        schedules: (c.schedules ?? []).map((s) => ({
+            ...s,
+            startDate: date(s.startDate),
+            endDate: date(s.endDate),
+            createdAt: date(s.createdAt),
+            updatedAt: date(s.updatedAt),
+        })),
+        assessments: (c.assessments ?? []).map((a) => ({
+            ...a,
+            createdAt: date(a.createdAt),
+            updatedAt: date(a.updatedAt),
+        })),
+    };
+}
 async function persist() { await browserDbSet('courses', courses); }
 function cloneCourse(course: Course): Course {
     return {

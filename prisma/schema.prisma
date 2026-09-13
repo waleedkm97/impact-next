@@ -362,19 +362,36 @@ model LessonQuestion {
 }
 
 model CourseAssessment {
-  id             String         @id
+  id             String              @id
   courseId       String
   assessmentType AssessmentType?
   title          String
   description    String?
   passingScore   Int
   timeLimit      Int?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
-  course         Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course         Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions      AssessmentQuestion[]
 
   @@index([courseId, assessmentType])
+}
+
+model AssessmentQuestion {
+  id             String          @id
+  assessmentId   String
+  question       String
+  type           String
+  options        String[]
+  correctAnswer  Json
+  explanation    String?
+  order          Int
+  points         Int?
+
+  assessment     CourseAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId, order])
 }
 
 model Schedule {

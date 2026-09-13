@@ -6,7 +6,6 @@ import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
 import { groupRepository } from '@/lib/data/repositories/group-repository';
-import { orderRepository } from '@/lib/data/repositories/order-repository';
 
 export default function Account() {
   const router = useRouter();
@@ -15,7 +14,6 @@ export default function Account() {
   const [courses, setCourses] = useState<Record<string, any>>({});
   const [schedules, setSchedules] = useState<Record<string, any>>({});
   const [groups, setGroups] = useState<Record<string, any>>({});
-  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -75,9 +73,6 @@ export default function Account() {
             }),
         );
 
-        const activeOrders = await orderRepository.findActiveOrders(
-          currentUser.id,
-        );
 
         if (!active) return;
 
@@ -92,7 +87,6 @@ export default function Account() {
         setCourses(Object.fromEntries(courseEntries));
         setSchedules(Object.fromEntries(scheduleEntries));
         setGroups(Object.fromEntries(groupEntries));
-        setOrders(activeOrders);
         setLoading(false);
       } catch (error) {
         console.error('Failed to load account:', error);
@@ -387,54 +381,6 @@ export default function Account() {
             </div>
           )}
         </section>
-
-        {orders.length > 0 && (
-          <section className="mt-8">
-            <div className="mb-5">
-              <span className="text-sm font-medium text-[#8b6508]">
-                الطلبات
-              </span>
-              <h2 className="mt-1 text-3xl font-bold text-[#062b67]">
-                طلبات التسجيل
-              </h2>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {orders.map((order) => (
-                <article
-                  key={order.id}
-                  className="rounded-3xl border bg-white p-6 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <span className="text-xs text-gray-500">
-                        رقم الطلب
-                      </span>
-                      <strong className="mt-1 block text-[#062b67]">
-                        {order.orderNumber}
-                      </strong>
-                    </div>
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
-                      {order.status === 'confirmed'
-                        ? 'تم الاعتماد'
-                        : order.status === 'processing'
-                          ? 'قيد المعالجة'
-                          : 'بانتظار التأكيد'}
-                    </span>
-                  </div>
-
-                  <h3 className="mt-5 font-bold text-[#062b67]">
-                    {order.items?.[0]?.title || 'دورة تدريبية'}
-                  </h3>
-
-                  <p className="mt-2 text-sm text-gray-500">
-                    سيتم إظهار الدورة ضمن «دوراتي» بعد اعتماد الطلب.
-                  </p>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* دوراتي */}
         <section className="mt-8">
