@@ -147,14 +147,35 @@ export default function CourseLearningPage() {
 
     async function load() {
       try {
-        const [currentCourse, currentUser] = await Promise.all([
-          courseRepository.findById(id),
-          traineeRepository.getCurrentUser(),
-        ]);
+        const [currentCourse, currentUser, assessmentsResponse] =
+  await Promise.all([
+    courseRepository.findById(id),
+    traineeRepository.getCurrentUser(),
+    fetch(`/api/assessments?courseId=${encodeURIComponent(id)}`),
+  ]);
 
-        if (!active) return;
+if (!active) return;
 
-        setCourse(currentCourse);
+let courseWithAssessments = currentCourse;
+
+try {
+  const assessmentsData = await assessmentsResponse.json();
+
+  if (
+    currentCourse &&
+    assessmentsData?.success &&
+    Array.isArray(assessmentsData.assessments)
+  ) {
+    courseWithAssessments = {
+      ...currentCourse,
+      assessments: assessmentsData.assessments,
+    };
+  }
+} catch (error) {
+  console.error('Failed to load course assessments:', error);
+}
+
+setCourse(courseWithAssessments);
 
         if (!currentCourse || !currentUser) {
           setUser(currentUser);

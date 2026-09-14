@@ -24,68 +24,66 @@ export default function AssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
-  const [result, setResult] = useState<{ score?: number } | null>(null);
+  const [result, setResult] = useState<{ score?: number; passed: boolean } | null>(null);
   const [blockedReason, setBlockedReason] = useState('');
-  const [publicScheduleEnabled, setPublicScheduleEnabled] = useState(false);
-
+  const [publicSchedule, setPublicSchedule] = useState<any>(null);
+const [course, setCourse] = useState<any>(null);
   useEffect(() => {
     let active = true;
 
     async function load() {
-      const [course, currentUser] = await Promise.all([
-        courseRepository.findById(courseId),
-        traineeRepository.getCurrentUser(),
-      ]);
+      const [course, currentUser, assessmentsResponse] =
+  await Promise.all([
+    courseRepository.findById(courseId),
+    traineeRepository.getCurrentUser(),
+    fetch(
+      `/api/assessments?courseId=${encodeURIComponent(courseId)}`
+    ),
+  ]);
+
+      if (!active) return;
+setCourse(course);
+      const currentEnrollment = currentUser?.enrollments?.find(
+        (e: any) =>
+          (enrollmentId && e.id === enrollmentId) ||
+          e.courseId === courseId,
+      );
+
+      const schedule = currentEnrollment?.scheduleId
+        ? await scheduleRepository.findById(currentEnrollment.scheduleId)
+        : null;
 
       if (!active) return;
 
-      const item = course?.assessments?.find((a: any) =>
-        a.assessmentType === type ||
-        (type === 'pre' && a.title === 'التقييم القبلي') ||
-        (type === 'post' && a.title === 'التقييم البعدي') ||
-        (type === 'evaluation' && (a.title === 'تقييم الدورة' || a.title === 'تقييم البرنامج')),
-      ) ?? null;
+      setPublicSchedule(schedule);
+
+      let assessments = course?.assessments ?? [];
+
+try {
+  const assessmentsData = await assessmentsResponse.json();
+
+  if (
+    assessmentsData?.success &&
+    Array.isArray(assessmentsData.assessments)
+  ) {
+    assessments = assessmentsData.assessments;
+  }
+} catch (error) {
+  console.error('Failed to load assessments:', error);
+}
+
+const item = assessments.find((a: any) =>
+  a.assessmentType === type ||
+  (type === 'pre' && a.title === 'التقييم القبلي') ||
+  (type === 'post' && a.title === 'التقييم البعدي') ||
+  (
+    type === 'evaluation' &&
+    (a.title === 'تقييم الدورة' || a.title === 'تقييم البرنامج')
+  ),
+) ?? null;
 
       setAssessment(item);
       setUser(currentUser);
-
-      const enrollment = currentUser?.enrollments?.find((e: any) =>
-        (enrollmentId && e.id === enrollmentId) || e.courseId === courseId,
-      );
-
-      if (enrollment && type !== 'pre') {
-        if (enrollment.groupId) {
-          const { groupRepository } = await import(
-            '@/lib/data/repositories/group-repository'
-          );
-          const settings = await groupRepository.getAssessmentSettings(
-            enrollment.groupId,
-          );
-          const assessmentSettings =
-            type === 'pre'
-              ? settings?.pre
-              : type === 'post'
-                ? settings?.post
-                : settings?.evaluation;
-          const enabled = Boolean(assessmentSettings?.enabled);
-          setPublicScheduleEnabled(enabled);
-          if (!enabled && enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] !== 'completed') {
-            setBlockedReason('التقييم مغلق حاليًا من الإدارة لهذه المجموعة.');
-          }
-        } else if (enrollment.scheduleId) {
-          const schedule = await scheduleRepository.findById(enrollment.scheduleId);
-          const enabled = type === 'post'
-            ? schedule?.postAssessmentEnabled === true
-            : schedule?.courseEvaluationEnabled === true;
-          setPublicScheduleEnabled(enabled);
-          if (!enabled && enrollment?.[type === 'post' ? 'postAssessment' : 'courseEvaluation'] !== 'completed') {
-            setBlockedReason('التقييم مغلق حاليًا لهذا الموعد التدريبي.');
-          }
-        } else {
-          setPublicScheduleEnabled(false);
-          setBlockedReason('لا يوجد موعد تدريبي مرتبط بهذا التسجيل.');
-        }
-      }
 
       setLoading(false);
     }
@@ -101,30 +99,38 @@ export default function AssessmentPage() {
     [user, enrollmentId, courseId],
   );
 
+  // Corporate assessments are controlled per group.
+  // Public enrollments have no group, so their assessment access must not
+  // depend on group settings. Pre is available immediately; Post/Evaluation
+  // become available after completing the training.
   const state = enrollment
+  ? enrollment.groupId
     ? type === 'pre'
       ? enrollment.preAssessment
-      : enrollment.groupId
-        ? type === 'post'
-          ? enrollment.postAssessment
-          : enrollment.courseEvaluation
-        : publicScheduleEnabled
-          ? type === 'post'
-            ? (enrollment.postAssessment === 'completed' ? 'completed' : 'available')
-            : (enrollment.courseEvaluation === 'completed' ? 'completed' : 'available')
-          : type === 'post'
-            ? enrollment.postAssessment
-            : enrollment.courseEvaluation
-    : 'locked';
+      : type === 'post'
+        ? enrollment.postAssessment
+        : enrollment.courseEvaluation
+    : type === 'pre'
+      ? enrollment.preAssessment === 'completed'
+        ? 'completed'
+        : 'available'
+      : type === 'post'
+        ? enrollment.postAssessment === 'completed'
+          ? 'completed'
+          : course?.postAssessmentEnabled === true
+            ? 'available'
+            : 'locked'
+        : enrollment.courseEvaluation === 'completed'
+          ? 'completed'
+          : course?.courseEvaluationEnabled === true
+            ? 'available'
+            : 'locked'
+  : 'locked';
 
   if (loading) return <main dir="rtl" className="container mx-auto px-6 py-12">جاري تحميل التقييم...</main>;
 
   if (!user || !enrollment) {
     return <main dir="rtl" className="container mx-auto px-6 py-12"><h1>التقييم غير متاح</h1><Link href="/account">العودة إلى الحساب</Link></main>;
-  }
-
-  if ((type === 'post' || type === 'evaluation') && Number(enrollment.progress ?? 0) < 100) {
-    return <main dir="rtl" className="container mx-auto max-w-3xl px-6 py-12"><div className="account-empty-state"><h1>{type === 'post' ? 'التقييم البعدي' : 'تقييم الدورة'}</h1><p>يصبح هذا التقييم متاحًا بعد إكمال البرنامج التدريبي.</p><Link className="btn-primary" href={`/course-learning?id=${encodeURIComponent(courseId)}`}>العودة إلى الدورة</Link></div></main>;
   }
 
   if (state === 'completed') {
@@ -140,9 +146,7 @@ export default function AssessmentPage() {
   }
 
   async function submit() {
-    const unanswered = assessment!.questions.filter(q =>
-      q.type !== 'text' && answers[q.id] === undefined
-    ).length;
+    const unanswered = assessment!.questions.filter(q => q.type !== 'text' && answers[q.id] === undefined).length;
     if (unanswered) {
       alert('أجب عن جميع أسئلة التقييم قبل التسليم.');
       return;
@@ -158,49 +162,63 @@ export default function AssessmentPage() {
         ? Math.round((ratingTotal / (ratingQuestions.length * 5)) * 100)
         : 0;
 
-      await traineeRepository.updateEnrollment(
-        user.id,
-        enrollment.id ?? courseId,
-        {
-          courseEvaluation: 'completed',
-          courseEvaluationCompletedAt: new Date(),
-        },
-      );
-      setResult({ score: evaluationScore });
+      await traineeRepository.updateEnrollment(user.id, enrollment.id ?? courseId, {
+        courseEvaluation: 'completed',
+        courseEvaluationScore: evaluationScore,
+        courseEvaluationCompletedAt: new Date(),
+      });
+      setResult({ score: evaluationScore, passed: true });
       setSubmitted(true);
       return;
     }
 
     let earned = 0;
     let total = 0;
+
+    const normalizeAnswer = (value: unknown) => {
+      const text = String(value ?? '').trim();
+      const englishIndex = ['A', 'B', 'C', 'D'].indexOf(text.toUpperCase());
+      if (englishIndex >= 0) return String(englishIndex);
+
+      const arabicIndex = ['أ', 'ب', 'ج', 'د'].indexOf(text);
+      if (arabicIndex >= 0) return String(arabicIndex);
+
+      return text;
+    };
+
     assessment!.questions.forEach(q => {
       const points = Number(q.points ?? 1);
       total += points;
+
+      const rawAnswer = String(answers[q.id] ?? '').trim();
+      const selectedIndex = Number(rawAnswer);
+      const hasSelectedIndex = Number.isInteger(selectedIndex) && selectedIndex >= 0 && selectedIndex < (q.options?.length ?? 0);
+      const selectedOption = hasSelectedIndex ? q.options?.[selectedIndex] : rawAnswer;
+
+      const isCorrect = (value: unknown) => {
+        const correctText = String(value ?? '').trim();
+        return (
+          normalizeAnswer(value) === normalizeAnswer(rawAnswer) ||
+          normalizeAnswer(value) === normalizeAnswer(selectedOption) ||
+          correctText === String(selectedOption ?? '').trim()
+        );
+      };
+
       const correct = Array.isArray(q.correctAnswer)
-        ? q.correctAnswer.map(String).includes(String(answers[q.id]))
-        : String(answers[q.id]) === String(q.correctAnswer);
+        ? q.correctAnswer.some(isCorrect)
+        : isCorrect(q.correctAnswer);
+
       if (correct) earned += points;
     });
 
     const score = total ? Math.round((earned / total) * 100) : 0;
-
-    await traineeRepository.updateEnrollment(
-      user.id,
-      enrollment.id ?? courseId,
+    await traineeRepository.updateEnrollment(user.id, enrollment.id ?? courseId,
       type === 'pre'
-        ? {
-            preAssessment: 'completed',
-            preAssessmentScore: score,
-            preAssessmentCompletedAt: new Date(),
-          }
-        : {
-            postAssessment: 'completed',
-            postAssessmentScore: score,
-            postAssessmentCompletedAt: new Date(),
-          },
+        ? { preAssessment: 'completed', preAssessmentScore: score, preAssessmentCompletedAt: new Date() }
+        : { postAssessment: 'completed', postAssessmentScore: score, postAssessmentCompletedAt: new Date() },
     );
 
-    setResult({ score });
+    setResult({ score, passed: true });
     setSubmitted(true);
   }
 
@@ -215,32 +233,16 @@ export default function AssessmentPage() {
     <h1 className="mt-4 text-3xl font-bold">{assessment.title || title}</h1>
     {assessment.description ? <p className="mt-2 text-muted-foreground">{assessment.description}</p> : null}
     {type !== 'evaluation' ? <p className="mt-2 text-muted-foreground">النتيجة تُحسب من 100 ولا توجد درجة نجاح أو رسوب.</p> : <p className="mt-2 text-muted-foreground">قيّم كل بند من 1 إلى 5، والسؤال الأخير اختياري ويمكنك كتابة أي ملاحظات أو اقتراحات.</p>}
-
     <div className="mt-8 space-y-5">
       {assessment.questions.map((q, index) => (
         <section key={q.id} className="rounded-xl border p-5">
           <h2 className="font-semibold">{index + 1}. {q.question}</h2>
           <div className="mt-4 space-y-3">
-            {q.type === 'text' ? (
-              <textarea
-                className="w-full rounded-lg border p-3 min-h-32"
-                placeholder="اكتب رأيك أو اقتراحاتك (اختياري)"
-                value={answers[q.id] ?? ''}
-                onChange={(event) => setAnswers(v => ({ ...v, [q.id]: event.target.value }))}
-              />
-            ) : (
-              (q.options ?? []).map((option, optionIndex) => (
-                <label key={optionIndex} className="flex cursor-pointer gap-3 rounded-lg border p-3">
-                  <input type="radio" name={q.id} checked={answers[q.id] === String(optionIndex)} onChange={() => setAnswers(v => ({ ...v, [q.id]: String(optionIndex) }))}/>
-                  <span>{option}</span>
-                </label>
-              ))
-            )}
+            {q.type === 'text' ? <textarea className="w-full rounded-lg border p-3 min-h-32" placeholder="اكتب رأيك أو اقتراحاتك (اختياري)" value={answers[q.id] ?? ''} onChange={event => setAnswers(v => ({ ...v, [q.id]: event.target.value }))} /> : (q.options ?? []).map((option, optionIndex) => <label key={optionIndex} className="flex cursor-pointer gap-3 rounded-lg border p-3"><input type="radio" name={q.id} checked={answers[q.id] === String(optionIndex)} onChange={() => setAnswers(v => ({ ...v, [q.id]: String(optionIndex) }))}/><span>{option}</span></label>)}
           </div>
         </section>
       ))}
     </div>
-
     <button className="btn-primary mt-8" onClick={() => void submit()}>تسليم التقييم</button>
   </main>;
 }
