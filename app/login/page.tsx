@@ -78,23 +78,74 @@ export default function Login() {
         return;
       }
 
-      /*
-       * إذا لم يكن حساب موظف،
-       * نجرب حساب المتدرب المعتاد.
-       */
-      const user =
-        await traineeRepository.loginUser(
-          email,
-          password,
-        );
+     /*
+ * إذا لم يكن حساب موظف،
+ * نجرب حساب المتدرب من SQL.
+ */
+const traineeResponse = await fetch(
+  '/api/trainees/login',
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  },
+);
 
-      if (!user) {
-        setMsg(
-          'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
-        );
+const traineeData = await traineeResponse
+  .json()
+  .catch(() => null);
 
-        return;
-      }
+if (
+  !traineeResponse.ok ||
+  !traineeData?.success ||
+  !traineeData?.trainee?.id
+) {
+  setMsg(
+    traineeData?.error ??
+      'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+  );
+
+  return;
+}
+
+/*
+ * نبحث عن النسخة المحلية للمتدرب بنفس البريد
+ * حتى تستمر صفحات Account والكورسات الحالية
+ * باستخدام الـ ID المحلي الموجود لديها.
+ */
+const localUser =
+  await traineeRepository.findByEmail(email);
+
+if (!localUser) {
+  setMsg(
+    'تم تسجيل الدخول، لكن تعذر تحميل بيانات المتدرب الحالية.',
+  );
+
+  return;
+}
+
+/*
+ * نثبت الجلسة المحلية باستخدام نفس نظام الجلسة
+ * الموجود حاليًا في النظام.
+ */
+const sessionUser =
+  await traineeRepository.loginUser(
+    email,
+    password,
+  );
+
+if (!sessionUser) {
+  setMsg(
+    'تم التحقق من الحساب، لكن تعذر إنشاء جلسة المتدرب.',
+  );
+
+  return;
+}
 
       router.push(
         next.startsWith('/')

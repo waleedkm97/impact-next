@@ -54,8 +54,7 @@ export default function TrainingProgram() {
         return;
       }
       setCourse(currentCourse);
-      setSchedules(scheduleList.filter(schedule => allowedCities.includes(schedule.city || onlineCity)));
-      setLoading(false);
+      setSchedules(scheduleList.filter((schedule: Schedule) => allowedCities.includes(schedule.city || onlineCity)));
     }
 
     if (id) {

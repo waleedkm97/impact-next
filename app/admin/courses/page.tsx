@@ -47,7 +47,11 @@ const empty: Form = {
     post: true,
     evaluation: true,
 };
-
+function makeCourseId() {
+    return `course-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`;
+}
 function slugify(v: string) {
     return v
         .trim()
@@ -171,6 +175,7 @@ export default function CoursesAdmin() {
         }
 
         const payload: any = {
+            id: editing ?? makeCourseId(),
             title: form.title.trim(),
             slug: slugify(form.title),
             description: form.description.trim(),
@@ -230,11 +235,32 @@ export default function CoursesAdmin() {
                 : new Date(),
         };
 
-        if (editing) {
-            await courseRepository.update(editing, payload);
-        } else {
-            await courseRepository.create(payload);
-        }
+        const sqlResponse = await fetch('/api/courses', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+});
+
+const sqlData = await sqlResponse
+    .json()
+    .catch(() => null);
+
+if (!sqlResponse.ok || !sqlData?.success) {
+    alert(
+        sqlData?.error ??
+            'تعذر حفظ الدورة في قاعدة البيانات.',
+    );
+
+    return;
+}
+
+if (editing) {
+    await courseRepository.update(editing, payload);
+} else {
+    await courseRepository.create(payload);
+}
 
         setOpen(false);
         await load();

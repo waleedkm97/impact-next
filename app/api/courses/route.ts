@@ -106,9 +106,7 @@ export async function POST(request: Request) {
         postAssessmentEnabled:
           body.postAssessmentEnabled === true,
         courseEvaluationEnabled:
-          courseType === 'training'
-            ? body.courseEvaluationEnabled !== false
-            : false,
+  body.courseEvaluationEnabled === true,
         attendanceEnabled:
           body.attendanceEnabled === true,
         featured: body.featured === true,
@@ -186,10 +184,8 @@ export async function POST(request: Request) {
           body.preAssessmentEnabled === true,
         postAssessmentEnabled:
           body.postAssessmentEnabled === true,
-        courseEvaluationEnabled:
-          courseType === 'training'
-            ? body.courseEvaluationEnabled !== false
-            : false,
+       courseEvaluationEnabled:
+  body.courseEvaluationEnabled === true,
         attendanceEnabled:
           body.attendanceEnabled === true,
         featured: body.featured === true,
@@ -207,78 +203,55 @@ export async function POST(request: Request) {
     });
 
     if (courseType === 'training') {
-      const assessmentId = `assessment_${course.id}_evaluation`;
+  const assessmentId = `assessment_${course.id}_evaluation`;
 
-      await prisma.courseAssessment.upsert({
-        where: {
-          id: assessmentId,
+  const existingEvaluation =
+    await prisma.courseAssessment.findUnique({
+      where: {
+        id: assessmentId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+  if (!existingEvaluation) {
+    await prisma.courseAssessment.create({
+      data: {
+        id: assessmentId,
+        courseId: course.id,
+        assessmentType: 'evaluation',
+        title: 'تقييم الدورة',
+        description:
+          'قياس رضا المتدرب عن المدرب والمحتوى والتنظيم.',
+        passingScore: 0,
+        timeLimit: null,
+        questions: {
+          create: UNIFIED_EVALUATION_QUESTIONS.map(
+            (question, index) => ({
+              id: `${assessmentId}_q_${index + 1}`,
+              question,
+              type:
+                index ===
+                UNIFIED_EVALUATION_QUESTIONS.length - 1
+                  ? 'text'
+                  : 'multiple-choice',
+              options:
+                index ===
+                UNIFIED_EVALUATION_QUESTIONS.length - 1
+                  ? []
+                  : RATING_OPTIONS,
+              correctAnswer: '',
+              explanation: '',
+              order: index,
+              points: 0,
+            }),
+          ),
         },
-        create: {
-          id: assessmentId,
-          courseId: course.id,
-          assessmentType: 'evaluation',
-          title: 'تقييم الدورة',
-          description:
-            'قياس رضا المتدرب عن المدرب والمحتوى والتنظيم.',
-          passingScore: 0,
-          timeLimit: null,
-          questions: {
-            create: UNIFIED_EVALUATION_QUESTIONS.map(
-              (question, index) => ({
-                id: `${assessmentId}_q_${index + 1}`,
-                question,
-                type:
-                  index ===
-                  UNIFIED_EVALUATION_QUESTIONS.length - 1
-                    ? 'text'
-                    : 'multiple-choice',
-                options:
-                  index ===
-                  UNIFIED_EVALUATION_QUESTIONS.length - 1
-                    ? []
-                    : RATING_OPTIONS,
-                correctAnswer: '',
-                explanation: '',
-                order: index,
-                points: 0,
-              }),
-            ),
-          },
-        },
-        update: {
-          courseId: course.id,
-          assessmentType: 'evaluation',
-          title: 'تقييم الدورة',
-          description:
-            'قياس رضا المتدرب عن المدرب والمحتوى والتنظيم.',
-          passingScore: 0,
-          timeLimit: null,
-          questions: {
-            deleteMany: {},
-            create: UNIFIED_EVALUATION_QUESTIONS.map(
-              (question, index) => ({
-                id: `${assessmentId}_q_${index + 1}`,
-                question,
-                type:
-                  index ===
-                  UNIFIED_EVALUATION_QUESTIONS.length - 1
-                    ? 'text'
-                    : 'multiple-choice',
-                options:
-                  index ===
-                  UNIFIED_EVALUATION_QUESTIONS.length - 1
-                    ? []
-                    : RATING_OPTIONS,
-                correctAnswer: '',
-                explanation: '',
-                order: index,
-                points: 0,
-              }),
-            ),
-          },
-        },
-      });
-    }
+      },
+    });
+  }
+}
 
     return Response.json({
       success: true,

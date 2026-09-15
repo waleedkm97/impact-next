@@ -352,6 +352,7 @@ export default function ProgramsAdmin() {
       : undefined;
 
     const payload: any = {
+      id: editing ?? makeId('course'),
       title: form.title.trim(),
       slug: form.title.trim().toLowerCase().replace(/\s+/g, '-'),
       description: form.description.trim(),
@@ -394,6 +395,24 @@ export default function ProgramsAdmin() {
       createdAt: existing?.createdAt ?? new Date(),
       updatedAt: new Date(),
     };
+
+    const sqlResponse = await fetch('/api/courses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const sqlData = await sqlResponse.json().catch(() => null);
+
+    if (!sqlResponse.ok || !sqlData?.success) {
+      alert(
+        sqlData?.error ??
+          'تعذر حفظ البرنامج في قاعدة البيانات.',
+      );
+      return;
+    }
 
     if (editing) {
       await courseRepository.update(editing, payload);
@@ -942,7 +961,7 @@ export default function ProgramsAdmin() {
       programs.filter(isPublicTraining).map((course) => course.id),
     );
 
-    const publicSchedules = all.filter((schedule) =>
+    const publicSchedules = all.filter((schedule: Schedule) =>
       publicCourseIds.has(schedule.courseId),
     );
 

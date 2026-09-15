@@ -28,7 +28,31 @@ export default function Register() {
         setMsg('هذا البريد مستخدم بالفعل.');
         return;
       }
+      const sqlResponse = await fetch('/api/trainees/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          firstNameEnglish: firstNameEnglish.trim(),
+          lastNameEnglish: lastNameEnglish.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          password,
+        }),
+      });
 
+      const sqlData = await sqlResponse.json().catch(() => null);
+
+      if (!sqlResponse.ok || !sqlData?.success) {
+        setMsg(
+          sqlData?.error ??
+            'تعذر حفظ الحساب في قاعدة البيانات.',
+        );
+        return;
+      }
       await traineeRepository.create({
         profile: {
           firstName: firstName.trim(),
