@@ -17,6 +17,13 @@ export default function Account() {
   const [loading, setLoading] = useState(true);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
   const [profileForm, setProfileForm] = useState({
     firstName: '',
     lastName: '',
@@ -200,8 +207,70 @@ export default function Account() {
       setSavingProfile(false);
     }
   }
+  async function savePassword() {
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      alert('يرجى تعبئة جميع حقول كلمة المرور.');
+      return;
+    }
 
+    if (passwordForm.newPassword.length < 6) {
+      alert('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.');
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('تأكيد كلمة المرور غير مطابق.');
+      return;
+    }
+
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      alert('كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية.');
+      return;
+    }
+
+    setSavingPassword(true);
+
+    try {
+      const response = await fetch('/api/trainees/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+       body: JSON.stringify({
+  traineeEmail: user.email,
+  currentPassword: passwordForm.currentPassword,
+  newPassword: passwordForm.newPassword,
+}),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'تعذر تغيير كلمة المرور.');
+      }
+
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+
+      setChangingPassword(false);
+
+      alert('تم تغيير كلمة المرور بنجاح.');
+    } catch (error) {
+      console.error('Failed to change password:', error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر تغيير كلمة المرور. حاول مرة أخرى.',
+      );
+    } finally {
+      setSavingPassword(false);
+    }
+  }
   return (
+
     <main
       dir="rtl"
       className="min-h-screen bg-gray-50"
@@ -377,6 +446,121 @@ export default function Account() {
               <div className="rounded-2xl bg-gray-50 p-5">
                 <span className="text-sm text-gray-500">الشركة</span>
                 <strong className="mt-2 block text-[#062b67]">{user.company?.companyName || 'غير مضاف'}</strong>
+              </div>
+            </div>
+          )}
+               </section>
+
+        {/* تغيير كلمة المرور */}
+        <section className="mt-8 rounded-3xl border bg-white p-6 shadow-sm md:p-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-[#062b67]">
+                كلمة المرور
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                يمكنك تغيير كلمة المرور الخاصة بحسابك.
+              </p>
+            </div>
+
+            {!changingPassword && (
+              <button
+                type="button"
+                className="rounded-xl border border-[#062b67] bg-white px-5 py-2.5 text-sm font-semibold text-[#062b67] hover:bg-gray-50"
+                onClick={() => setChangingPassword(true)}
+              >
+                تغيير كلمة المرور
+              </button>
+            )}
+          </div>
+
+          {changingPassword && (
+            <div className="mt-6 max-w-2xl space-y-4">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">
+                  كلمة المرور الحالية
+                </span>
+
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={passwordForm.currentPassword}
+                  onChange={(event) =>
+                    setPasswordForm({
+                      ...passwordForm,
+                      currentPassword: event.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">
+                  كلمة المرور الجديدة
+                </span>
+
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={passwordForm.newPassword}
+                  onChange={(event) =>
+                    setPasswordForm({
+                      ...passwordForm,
+                      newPassword: event.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-gray-600">
+                  تأكيد كلمة المرور الجديدة
+                </span>
+
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border px-4 py-3 outline-none focus:border-[#062b67]"
+                  value={passwordForm.confirmPassword}
+                  onChange={(event) =>
+                    setPasswordForm({
+                      ...passwordForm,
+                      confirmPassword: event.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="button"
+                  className="rounded-xl bg-[#062b67] px-6 py-3 font-semibold text-white disabled:opacity-60"
+                  onClick={() => void savePassword()}
+                  disabled={savingPassword}
+                >
+                  {savingPassword
+                    ? 'جاري تغيير كلمة المرور...'
+                    : 'حفظ كلمة المرور'}
+                </button>
+
+                <button
+                  type="button"
+                  className="rounded-xl border px-6 py-3 font-semibold text-gray-700"
+                  onClick={() => {
+                    setChangingPassword(false);
+                    setPasswordForm({
+                      currentPassword: '',
+                      newPassword: '',
+                      confirmPassword: '',
+                    });
+                  }}
+                  disabled={savingPassword}
+                >
+                  إلغاء
+                </button>
               </div>
             </div>
           )}

@@ -54,9 +54,13 @@ export default function TrainingProgram() {
         return;
       }
       setCourse(currentCourse);
-      setSchedules(scheduleList.filter((schedule: Schedule) => allowedCities.includes(schedule.city || onlineCity)));
-    }
-
+setSchedules(
+  scheduleList.filter((schedule: Schedule) =>
+    allowedCities.includes(schedule.city || onlineCity),
+  ),
+);
+setLoading(false);
+  }
     if (id) {
       void load();
     } else {

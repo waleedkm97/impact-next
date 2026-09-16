@@ -134,9 +134,8 @@ if (!localUser) {
  * الموجود حاليًا في النظام.
  */
 const sessionUser =
-  await traineeRepository.loginUser(
-    email,
-    password,
+  await traineeRepository.startSession(
+    localUser.id,
   );
 
 if (!sessionUser) {
@@ -202,21 +201,34 @@ if (!sessionUser) {
           />
         </label>
 
-        <label>
-          كلمة المرور
+       <label>
+  كلمة المرور
 
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(event) =>
-              setPassword(
-                event.target.value,
-              )
-            }
-            autoComplete="current-password"
-          />
-        </label>
+  <input
+    type="password"
+    required
+    value={password}
+    onChange={(event) =>
+      setPassword(
+        event.target.value,
+      )
+    }
+    autoComplete="current-password"
+  />
+
+  <div style={{ marginTop: 8, textAlign: 'right' }}>
+    <Link
+      href="/forgot-password"
+      style={{
+        fontSize: 13,
+        color: '#1d5fa7',
+        textDecoration: 'none',
+      }}
+    >
+      نسيت كلمة المرور؟
+    </Link>
+  </div>
+</label>
 
         {msg && (
           <div className="auth-error">

@@ -990,7 +990,25 @@ const allRequirementsCompleted =
 
     return cloneTrainee(trainee);
   }
+  async startSession(userId: string) {
+    await ensureHydrated();
 
+    const trainee = trainees.find(
+      (item) => item.id === userId,
+    );
+
+    if (!trainee) {
+      return null;
+    }
+
+    trainee.lastLoginAt = now();
+    trainee.updatedAt = now();
+
+    setSession(trainee.id);
+    await persist();
+
+    return cloneTrainee(trainee);
+  }
   async getCurrentUser() {
     await ensureHydrated();
 
