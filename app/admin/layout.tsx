@@ -42,7 +42,12 @@ const menuItems = [
     icon: '▢',
     roles: ['admin'],
   },
-
+{
+  href: '/admin/contact-requests',
+  label: 'طلبات التواصل',
+  icon: '✉',
+  roles: ['admin'],
+},
   {
     href: '/admin/students',
     label: 'المتدربون',

@@ -181,32 +181,60 @@ export default function Account() {
 
 
   async function saveProfile() {
-    setSavingProfile(true);
-    try {
-      const updated = await traineeRepository.update(user.id, {
-        profile: {
-          ...user.profile,
-          firstName: profileForm.firstName.trim(),
-          lastName: profileForm.lastName.trim(),
-          firstNameEnglish: profileForm.firstNameEnglish.trim() || undefined,
-          lastNameEnglish: profileForm.lastNameEnglish.trim() || undefined,
-          gender: profileForm.gender || undefined,
-        },
-        contact: {
-          ...user.contact,
-          phone: profileForm.phone.trim() || undefined,
-        },
-      });
+  setSavingProfile(true);
 
-      setUser(updated);
-      setEditingProfile(false);
-    } catch (error) {
-      console.error('Failed to save profile:', error);
-      alert('تعذر حفظ البيانات. حاول مرة أخرى.');
-    } finally {
-      setSavingProfile(false);
+  try {
+    const response = await fetch('/api/trainees/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: user.email,
+        firstName: profileForm.firstName.trim(),
+        lastName: profileForm.lastName.trim(),
+        firstNameEnglish: profileForm.firstNameEnglish.trim(),
+        lastNameEnglish: profileForm.lastNameEnglish.trim(),
+        phone: profileForm.phone.trim(),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'تعذر حفظ البيانات.');
     }
+
+    const updated = await traineeRepository.update(user.id, {
+      profile: {
+        ...user.profile,
+        firstName: profileForm.firstName.trim(),
+        lastName: profileForm.lastName.trim(),
+        firstNameEnglish:
+          profileForm.firstNameEnglish.trim() || undefined,
+        lastNameEnglish:
+          profileForm.lastNameEnglish.trim() || undefined,
+        gender: profileForm.gender || undefined,
+      },
+      contact: {
+        ...user.contact,
+        phone: profileForm.phone.trim() || undefined,
+      },
+    });
+
+    setUser(updated);
+    setEditingProfile(false);
+  } catch (error) {
+    console.error('Failed to save profile:', error);
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'تعذر حفظ البيانات. حاول مرة أخرى.',
+    );
+  } finally {
+    setSavingProfile(false);
   }
+}
   async function savePassword() {
     if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
       alert('يرجى تعبئة جميع حقول كلمة المرور.');

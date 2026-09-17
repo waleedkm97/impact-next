@@ -85,8 +85,63 @@ export default function Students() {
   const [resultsTrainee, setResultsTrainee] = useState<any>(null);
 
   async function load() {
-    await traineeRepository.refresh();
-    setItems(await traineeRepository.findAll());
+    try {
+      const response = await fetch('/api/trainees/admin');
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || 'تعذر تحميل المتدربين.',
+        );
+      }
+
+      const sqlTrainees = Array.isArray(result.trainees)
+        ? result.trainees
+        : [];
+
+      const mappedTrainees = sqlTrainees.map((trainee: any) => ({
+        ...trainee,
+
+        profile: {
+          firstName: trainee.firstName ?? '',
+          lastName: trainee.lastName ?? '',
+          firstNameEnglish:
+            trainee.firstNameEnglish ?? '',
+          lastNameEnglish:
+            trainee.lastNameEnglish ?? '',
+          gender: trainee.gender ?? '',
+        },
+
+        contact: {
+          email: trainee.email ?? '',
+          phone: trainee.phone ?? '',
+        },
+
+        company: trainee.companyName
+          ? {
+              companyName: trainee.companyName,
+            }
+          : undefined,
+
+        enrollments: Array.isArray(trainee.enrollments)
+          ? trainee.enrollments
+          : [],
+
+        progress: [],
+        certificates: [],
+      }));
+
+      setItems(mappedTrainees);
+    } catch (error) {
+      console.error('Failed to load trainees:', error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر تحميل المتدربين.',
+      );
+    }
   }
 
   useEffect(() => {
@@ -118,58 +173,68 @@ export default function Students() {
   }
 
   async function save(event: React.FormEvent) {
-    event.preventDefault();
+  event.preventDefault();
 
-    const data: any = {
-     profile: {
-  firstName: form.firstName.trim(),
-  lastName: form.lastName.trim(),
-  firstNameEnglish: form.firstNameEnglish.trim() || undefined,
-  lastNameEnglish: form.lastNameEnglish.trim() || undefined,
-  gender: form.gender || undefined,
-},
+  const email = form.email.trim();
 
-      contact: {
-        email: form.email.trim(),
-        phone: form.phone.trim(),
+  if (!email) {
+    alert('أدخل البريد الإلكتروني.');
+    return;
+  }
+
+  if (!editing && !form.password) {
+    alert('أدخل كلمة المرور.');
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      editing ? '/api/trainees/admin' : '/api/trainees/admin',
+      {
+        method: editing ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: editing ?? undefined,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          firstNameEn:
+            form.firstNameEnglish.trim() || undefined,
+          lastNameEn:
+            form.lastNameEnglish.trim() || undefined,
+          email,
+          phone: form.phone.trim(),
+          password: form.password || undefined,
+          status: 'active',
+          emailVerified: true,
+        }),
       },
+    );
 
-      email: form.email.trim(),
+    const result = await response.json();
 
-      company: form.company.trim()
-        ? {
-            companyName: form.company.trim(),
-          }
-        : undefined,
-
-      status: 'active',
-      emailVerified: true,
-    };
-
-    if (form.password) {
-      data.passwordHash = form.password;
-    }
-
-    if (editing) {
-      await traineeRepository.update(editing, data);
-    } else {
-      if (!form.password) {
-        alert('أدخل كلمة المرور.');
-        return;
-      }
-
-      await traineeRepository.create({
-        ...data,
-        passwordHash: form.password,
-        enrollments: [],
-        progress: [],
-        certificates: [],
-      });
+    if (!response.ok || !result.success) {
+      throw new Error(
+        result.error || 'تعذر حفظ حساب المتدرب.',
+      );
     }
 
     setOpen(false);
+    setEditing(null);
+    setForm(initialForm);
+
     await load();
+  } catch (error) {
+    console.error('Failed to save trainee:', error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'تعذر حفظ حساب المتدرب.',
+    );
   }
+}
 
   async function openAttendance(trainee: any) {
     const enrollment = trainee.enrollments?.[0];

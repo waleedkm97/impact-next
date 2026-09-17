@@ -167,49 +167,94 @@ export default function GroupsPage() {
   });
 
   async function load() {
-    await traineeRepository.refresh();
+  await traineeRepository.refresh();
 
-    const [
-      groupList,
-      courseList,
-      traineeList,
-      scheduleList,
-      staffList,
-    ] = await Promise.all([
-      groupRepository.findAll(),
-      courseRepository.findAll(),
-      traineeRepository.findAll(),
-      scheduleRepository.findAll({
-        sort: 'startDate',
-        order: 'asc',
-      }),
-      staffRepository.findAll(),
-    ]);
+  const [
+    localGroupList,
+    courseList,
+    traineeList,
+    scheduleList,
+    staffList,
+  ] = await Promise.all([
+    groupRepository.findAll(),
+    courseRepository.findAll(),
+    traineeRepository.findAll(),
+    scheduleRepository.findAll({
+      sort: 'startDate',
+      order: 'asc',
+    }),
+    staffRepository.findAll(),
+  ]);
 
-    setGroups(groupList);
+  let groupList = localGroupList;
 
-    setCourses(
-      courseList.filter(
-        (course) => course.type === 'training',
-      ),
-    );
+  try {
+    const groupsResponse = await fetch('/api/groups');
 
-    setTrainees(traineeList);
-    setSchedules(scheduleList);
-    setStaffUsers(staffList.filter((staff) => staff.status === 'active'));
+    if (groupsResponse.ok) {
+      const sqlGroups = await groupsResponse.json();
 
-    if (
-      selectedCompany &&
-      !groupList.some(
-        (group) =>
-          (group.companyName || group.name) ===
-          selectedCompany,
-      )
-    ) {
-      setSelectedCompany('');
-      setSelectedGroupId('');
+      if (Array.isArray(sqlGroups)) {
+        const mappedSqlGroups: TrainingGroup[] = sqlGroups.map(
+          (group: any) => ({
+            ...group,
+            traineeIds: Array.isArray(group.traineeIds)
+              ? group.traineeIds
+              : [],
+            createdAt: new Date(group.createdAt),
+            updatedAt: new Date(group.updatedAt),
+          }),
+        );
+
+        const sqlGroupIds = new Set(
+          mappedSqlGroups.map((group) => group.id),
+        );
+
+        const localOnlyGroups = localGroupList.filter(
+          (group) => !sqlGroupIds.has(group.id),
+        );
+
+        groupList = [
+          ...mappedSqlGroups,
+          ...localOnlyGroups,
+        ];
+      }
     }
+  } catch (error) {
+    console.error(
+      'Failed to load groups from SQL:',
+      error,
+    );
   }
+
+  setGroups(groupList);
+
+  setCourses(
+    courseList.filter(
+      (course) => course.type === 'training',
+    ),
+  );
+
+  setTrainees(traineeList);
+  setSchedules(scheduleList);
+  setStaffUsers(
+    staffList.filter(
+      (staff) => staff.status === 'active',
+    ),
+  );
+
+  if (
+    selectedCompany &&
+    !groupList.some(
+      (group) =>
+        (group.companyName || group.name) ===
+        selectedCompany,
+    )
+  ) {
+    setSelectedCompany('');
+    setSelectedGroupId('');
+  }
+}
 
   useEffect(() => {
     void load();
@@ -419,66 +464,114 @@ export default function GroupsPage() {
     const companyName =
       form.companyName.trim();
 
-    const group = await groupRepository.create({
-      name:
-        form.name.trim() ||
-        companyName ||
-        `مجموعة ${course.title}`,
+   const group = await groupRepository.create({
+  name:
+    form.name.trim() ||
+    companyName ||
+    `مجموعة ${course.title}`,
 
-      type: 'corporate',
+  type: 'corporate',
 
-      status: 'active',
+  status: 'active',
 
-      courseId: course.id,
+  courseId: course.id,
 
-      courseTitle: course.title,
+  courseTitle: course.title,
 
-      scheduleId: undefined,
+  scheduleId: undefined,
 
-      corporateDate:
-        form.corporateDate || undefined,
+  corporateDate:
+    form.corporateDate || undefined,
 
-      corporateDelivery:
-        form.corporateDelivery,
+  corporateDelivery:
+    form.corporateDelivery,
 
-      corporateLocation:
-        form.corporateLocation.trim() || undefined,
+  corporateLocation:
+    form.corporateLocation.trim() || undefined,
 
-      materialUrl:
-        form.materialUrl || undefined,
+  materialUrl:
+    form.materialUrl || undefined,
 
-      companyName:
-        companyName || undefined,
+  companyName:
+    companyName || undefined,
 
-      responsibleName:
-        form.responsibleName.trim() ||
-        undefined,
+  responsibleName:
+    form.responsibleName.trim() ||
+    undefined,
 
-      responsibleEmail:
-        form.responsibleEmail.trim() ||
-        undefined,
+  responsibleEmail:
+    form.responsibleEmail.trim() ||
+    undefined,
 
-      responsiblePhone:
-        form.responsiblePhone.trim() ||
-        undefined,
+  responsiblePhone:
+    form.responsiblePhone.trim() ||
+    undefined,
 
-      traineeIds: [],
+  traineeIds: [],
 
-      notes:
-        form.notes.trim() || undefined,
+  notes:
+    form.notes.trim() || undefined,
 
-      assessmentSettings: {
-        pre: {
-          enabled: true,
-        },
-        post: {
-          enabled: false,
-        },
-        evaluation: {
-          enabled: false,
-        },
-      },
-    });
+  assessmentSettings: {
+    pre: {
+      enabled: true,
+    },
+    post: {
+      enabled: false,
+    },
+    evaluation: {
+      enabled: false,
+    },
+  },
+});
+
+const sqlResponse = await fetch('/api/groups', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    id: group.id,
+    name: group.name,
+    type: group.type,
+    status: group.status,
+    courseId: group.courseId,
+    courseTitle: group.courseTitle,
+    scheduleId: group.scheduleId,
+    corporateDate: group.corporateDate,
+    corporateDelivery:
+      group.corporateDelivery,
+    corporateLocation:
+      group.corporateLocation,
+    materialUrl: group.materialUrl,
+    companyName: group.companyName,
+    responsibleName:
+      group.responsibleName,
+    responsibleEmail:
+      group.responsibleEmail,
+    responsiblePhone:
+      group.responsiblePhone,
+    trainerId: group.trainerId,
+    coordinatorId:
+      group.coordinatorId,
+    maxParticipants:
+      group.maxParticipants,
+    notes: group.notes,
+    assessmentSettings:
+      group.assessmentSettings,
+  }),
+});
+
+if (!sqlResponse.ok) {
+  const result = await sqlResponse
+    .json()
+    .catch(() => null);
+
+  throw new Error(
+    result?.error ||
+      'تم إنشاء المجموعة محليًا ولكن تعذر حفظها في قاعدة البيانات.',
+  );
+}
 
     setSelectedCompany(
       companyName ||
@@ -653,7 +746,25 @@ export default function GroupsPage() {
         selectedGroupId,
         memberId,
       );
+      const response = await fetch(
+        `/api/groups/${selectedGroupId}/trainees`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            traineeId: memberId,
+          }),
+        },
+      );
 
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(
+          result?.error || 'تعذر تسجيل المتدرب في قاعدة البيانات.',
+        );
+      }
       setMemberId('');
 
       await load();

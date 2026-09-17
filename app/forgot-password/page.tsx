@@ -18,8 +18,28 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      // سيتم ربط إرسال رابط إعادة التعيين لاحقًا
-      alert('سيتم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.');
+      const response = await fetch('/api/trainees/forgot-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data?.error || 'حدث خطأ أثناء طلب إعادة تعيين كلمة المرور.');
+        return;
+      }
+
+    alert(
+  data?.message ||
+    'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.',
+);
+      alert('تعذر الاتصال بالخادم. حاول مرة أخرى.');
     } finally {
       setLoading(false);
     }
@@ -117,9 +137,7 @@ export default function ForgotPasswordPage() {
               opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading
-              ? 'جاري الإرسال...'
-              : 'إرسال رابط إعادة التعيين'}
+            {loading ? 'جاري الإرسال...' : 'إرسال رابط إعادة التعيين'}
           </button>
         </form>
 

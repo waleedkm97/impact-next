@@ -823,10 +823,172 @@ export default function ProgramsAdmin() {
         }
       });
 
-      await courseRepository.update(assessmentCourse.id, {
-        assessments: existingAssessments,
+      async function saveAssessments() {
+  if (!assessmentCourse) return;
+
+  const error = (
+    ['pre', 'post', 'evaluation'] as AssessmentType[]
+  )
+    .map((type) => drafts[type])
+    .filter(Boolean)
+    .map((assessment, index) =>
+      validateQuestions(
+        assessment!,
+        (['pre', 'post', 'evaluation'] as AssessmentType[])[index],
+      ),
+    )
+    .find(Boolean);
+
+  if (error) {
+    alert(error);
+    return;
+  }
+
+  setAssessmentSaving(true);
+
+  try {
+    const existingAssessments = Array.isArray(
+      (assessmentCourse as any).assessments,
+    )
+      ? [...(assessmentCourse as any).assessments]
+      : [];
+
+    const nextAssessments = (
+      ['pre', 'post', 'evaluation'] as AssessmentType[]
+    ).map((type) => {
+      const draft =
+        type === 'evaluation'
+          ? normalizeEvaluationAssessment(
+              assessmentCourse.id,
+              drafts.evaluation,
+            )
+          : drafts[type]!;
+
+      return {
+        ...draft,
+        assessmentType: type,
+        courseId: assessmentCourse.id,
+        questions: draft.questions.map((question, index) => ({
+          ...question,
+          lessonId: draft.id,
+          order: index,
+        })),
         updatedAt: new Date(),
+      };
+    });
+
+    /*
+     * حفظ التقييمات محليًا كما كان سابقًا
+     */
+    nextAssessments.forEach((assessment) => {
+      const index = existingAssessments.findIndex(
+        (item: any) =>
+          item.id === assessment.id ||
+          item.assessmentType === assessment.assessmentType,
+      );
+
+      if (index >= 0) {
+        existingAssessments[index] = assessment;
+      } else {
+        existingAssessments.push(assessment);
+      }
+    });
+
+   for (const assessment of nextAssessments) {
+  const response = await fetch('/api/assessments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: assessment.id,
+      courseId: assessmentCourse.id,
+      assessmentType: assessment.assessmentType,
+      title: assessment.title,
+      description: assessment.description ?? null,
+      passingScore: assessment.passingScore ?? 0,
+      timeLimit: assessment.timeLimit ?? null,
+      questions: assessment.questions.map((question, index) => ({
+        id: question.id,
+        question: question.question,
+        type: question.type,
+        options: question.options ?? [],
+        correctAnswer: question.correctAnswer ?? '',
+        explanation: question.explanation ?? null,
+        order: index,
+        points: question.points ?? null,
+      })),
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error ?? 'تعذر حفظ التقييم.');
+  }
+}
+
+    /*
+     * حفظ نفس التقييمات في SQL
+     */
+    for (const assessment of nextAssessments) {
+      const response = await fetch('/api/assessments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: assessment.id,
+          courseId: assessmentCourse.id,
+          assessmentType: assessment.assessmentType,
+          title: assessment.title,
+          description: assessment.description,
+          passingScore: assessment.passingScore ?? 0,
+          timeLimit: assessment.timeLimit ?? null,
+          questions: assessment.questions.map((question) => ({
+            id: question.id,
+            question: question.question,
+            type: question.type,
+            options: question.options ?? [],
+            correctAnswer: question.correctAnswer ?? '',
+            explanation: question.explanation ?? '',
+            points: question.points ?? 0,
+          })),
+        }),
       });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || 'تعذر حفظ التقييم في قاعدة البيانات.',
+        );
+      }
+    }
+
+    const refreshed = await courseRepository.findById(
+      assessmentCourse.id,
+    );
+
+    if (refreshed) {
+      setAssessmentCourse(refreshed);
+    }
+
+    await load();
+
+    alert('تم حفظ تقييمات البرنامج بنجاح.');
+  } catch (error) {
+    console.error('Failed to save assessments:', error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'تعذر حفظ التقييمات.',
+    );
+  } finally {
+    setAssessmentSaving(false);
+  }
+}
 
       const refreshed = await courseRepository.findById(
         assessmentCourse.id,
