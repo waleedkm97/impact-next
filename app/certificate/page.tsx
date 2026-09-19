@@ -2,32 +2,33 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
-import { courseRepository } from '@/lib/data/repositories/course-repository';
-import { groupRepository } from '@/lib/data/repositories/group-repository';
 import type { Trainee, Certificate } from '@/types/trainee';
 import type { Course } from '@/types/course';
-
-interface CertificateView {
-  trainee: Trainee;
-  certificate: Certificate;
-  course: Course | null;
-}
 
 function formatCertificateDate(value: unknown) {
   if (!value) return '—';
 
   const date = new Date(value as string | Date);
 
-  if (Number.isNaN(date.getTime())) {
-    return '—';
-  }
+  if (Number.isNaN(date.getTime())) return '—';
 
   const day = String(date.getUTCDate()).padStart(2, '0');
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const year = String(date.getUTCFullYear());
 
   return `${day}/${month}/${year}`;
+}
+
+interface CertificateView {
+  trainee: Trainee;
+  certificate: Certificate;
+  course: Course | null;
+  enrollment?: {
+    schedule?: {
+      city?: string | null;
+      onlineMeetingLink?: string | null;
+    } | null;
+  };
 }
 
 function getArabicName(trainee: Trainee) {
@@ -46,129 +47,96 @@ function getEnglishName(trainee: Trainee) {
   return name || getArabicName(trainee);
 }
 
-function getHours(course: Course | null) {
-  if (!course) return '—';
+function isOnlineDelivery(item: CertificateView) {
+  const schedule = item.enrollment?.schedule;
 
-  if (course.hours !== undefined && course.hours !== null) {
-    const value = String(course.hours)
-      .replace(/\s*ساعة.*$/i, '')
-      .trim();
-
-    return value || String(course.hours);
+  if (schedule) {
+    return Boolean(
+      schedule.onlineMeetingLink ||
+      schedule.city?.trim().toLowerCase() === 'online' ||
+      schedule.city?.trim() === 'أونلاين',
+    );
   }
 
-  return course.days ? String(Number(course.days) * 5) : '—';
+  return item.course?.delivery === 'online';
 }
 
-function getDuration(
-  course: Course | null,
-  language: 'ar' | 'en',
-) {
-  if (!course?.days) return '—';
+function getHours(item: CertificateView) {
+  if (item.course?.type === 'recorded') {
+    return item.course.hours !== undefined && item.course.hours !== null
+      ? String(item.course.hours)
+      : '—';
+  }
 
-  const days = Number(course.days);
+  return isOnlineDelivery(item) ? '9' : '15';
+}
+
+function getDuration(item: CertificateView, language: 'ar' | 'en') {
+  if (
+    item.course?.type === 'recorded' &&
+    item.course.days !== undefined &&
+    item.course.days !== null
+  ) {
+    const days = Number(item.course.days);
+
+    return language === 'en'
+      ? `${days} ${days === 1 ? 'day' : 'days'}`
+      : `${days} ${days === 1 ? 'يوم' : 'أيام'}`;
+  }
 
   if (language === 'en') {
-    return `${days} ${days === 1 ? 'day' : 'days'}`;
+    return '3 days';
   }
 
-  return `${days} ${days === 1 ? 'يوم' : 'أيام'}`;
+  return '3 أيام';
 }
 
-function getDelivery(
-  course: Course | null,
-  language: 'ar' | 'en',
-) {
-  if (!course) return '';
+function getDelivery(item: CertificateView, language: 'ar' | 'en') {
+  const online = isOnlineDelivery(item);
 
   if (language === 'en') {
-    if (course.delivery === 'online') {
-      return 'Live Online';
-    }
-
-    if (course.delivery === 'in-person') {
-      return 'In-Person';
-    }
-
-    return 'Hybrid';
+    return online ? 'Live Online' : 'In-Person';
   }
 
-  if (course.delivery === 'online') {
-    return 'أونلاين';
-  }
-
-  if (course.delivery === 'in-person') {
-    return 'حضوري';
-  }
-
-  return 'حضوري / أونلاين';
+  return online ? 'أونلاين' : 'حضوري';
 }
 
-function getEnglishCourseTitle(
-  course: Course | null,
-  certificate: Certificate,
-) {
-  const title =
+function getEnglishCourseTitle(course: Course | null, certificate: Certificate) {
+  const courseWithOptionalEnglishTitle = course as
+    | (Course & { titleEnglish?: string; titleEn?: string })
+    | null;
+  const candidates = [
+    courseWithOptionalEnglishTitle?.titleEnglish,
+    courseWithOptionalEnglishTitle?.titleEn,
+    course?.metaTitle,
+    course?.title,
+    certificate.courseTitle,
+  ];
+  const slugTitle = (course?.id || course?.slug)
+    ?.split('-')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+  return (
+    candidates.find(
+      (value) => typeof value === 'string' && /[A-Za-z]/.test(value.trim()),
+    )?.trim() ||
+    slugTitle ||
     course?.title?.trim() ||
     certificate.courseTitle?.trim() ||
-    '';
-
-  if (!title) {
-    return 'Training Course';
-  }
-
-  if (/[A-Za-z]/.test(title)) {
-    return title;
-  }
-
-  const translations: Record<string, string> = {
-    'مهارات البيع وتحويل الفرص لنتائج ملموسة':
-      'Sales Skills and Converting Opportunities into Results',
-    'القيادة الحديثة': 'Modern Leadership',
-    'القيادة التحويلية': 'Transformational Leadership',
-    'بناء فرق العمل': 'Team Building',
-    'مهارات البيع الحديثة': 'Modern Sales Skills',
-    'مهارات التفاوض': 'Negotiation Skills',
-    'البيع الاستشاري': 'Consultative Selling',
-    'مهارات التعامل مع العملاء':
-      'Customer Handling Skills',
-    'حل المشكلات والاعتراضات':
-      'Problem Solving and Objection Handling',
-    'تجربة العميل': 'Customer Experience',
-    'إدارة الأداء': 'Performance Management',
-    'مؤشرات الأداء': 'Key Performance Indicators',
-    'المقابلات الاحترافية':
-      'Professional Interviewing Skills',
-    'إدارة المشاريع الاحترافية':
-      'Professional Project Management',
-    'أساسيات أجيلي': 'Agile Fundamentals',
-    'أساسيات سكروم': 'Scrum Fundamentals',
-    'مهارات التواصل الفعال':
-      'Effective Communication Skills',
-    'مهارات العرض والإلقاء':
-      'Presentation and Public Speaking Skills',
-    'كتابة التقارير': 'Report Writing',
-    'إدارة الوقت بفعالية':
-      'Effective Time Management',
-    'تحديد الأولويات': 'Prioritization Skills',
-    'تحسين الإنتاجية': 'Productivity Improvement',
-    'حل المشكلات بطرق جديدة':
-      'Creative Problem Solving',
-    'إشعال روح الابتكار':
-      'Igniting Innovation',
-    'التفكير الاستراتيجي':
-      'Strategic Thinking',
-  };
-
-  return translations[title] || title;
+    'Training Course'
+  );
 }
 
 function CertificateSheet({
   item,
   language,
+  jobTitle,
 }: {
   item: CertificateView;
   language: 'ar' | 'en';
+  jobTitle: string;
 }) {
   const isArabic = language === 'ar';
 
@@ -185,9 +153,9 @@ function CertificateSheet({
         item.certificate,
       );
 
-  const duration = getDuration(item.course, language);
-  const hours = getHours(item.course);
-  const delivery = getDelivery(item.course, language);
+  const duration = getDuration(item, language);
+  const hours = getHours(item);
+  const delivery = getDelivery(item, language);
 
   return (
     <section className="certificate-sheet">
@@ -266,16 +234,22 @@ function CertificateSheet({
             <div className="duration-row">
               <span>{duration}</span>
 
-              {hours !== '—' && (
-                <span>
-                  {hours}{' '}
-                  {isArabic
-                    ? 'ساعة تدريبية'
-                    : 'Training Hours'}
-                </span>
-              )}
+              <span>
+                {hours}{' '}
+                {isArabic
+                  ? hours === '9'
+                    ? 'ساعات تدريبية'
+                    : hours === '—'
+                      ? ''
+                    : 'ساعة تدريبية'
+                  : 'Training Hours'}
+              </span>
             </div>
           </div>
+        </div>
+
+        <div className="certificate-job-title">
+          {jobTitle}
         </div>
 
         {/* رقم الشهادة */}
@@ -296,11 +270,17 @@ export default function CertificatePage() {
   const courseId =
     searchParams.get('courseId') || '';
 
+  const enrollmentId =
+    searchParams.get('enrollmentId') || '';
+
   const traineeId =
     searchParams.get('traineeId') || '';
 
   const groupId =
     searchParams.get('groupId') || '';
+
+  const adminMode =
+    searchParams.get('admin') === 'true';
 
   const [items, setItems] = useState<
     CertificateView[]
@@ -315,6 +295,11 @@ export default function CertificatePage() {
   const [error, setError] =
     useState('');
 
+  const [jobTitles, setJobTitles] = useState({
+    ar: 'الرئيس التنفيذي',
+    en: 'CEO',
+  });
+
   const isBulk = Boolean(groupId);
 
   useEffect(() => {
@@ -325,124 +310,75 @@ export default function CertificatePage() {
         setLoading(true);
         setError('');
 
-        const views: CertificateView[] = [];
-
-        if (groupId) {
-          const group =
-            await groupRepository.findById(
-              groupId,
-            );
-
-          if (!group) {
-            throw new Error(
-              'المجموعة غير موجودة.',
-            );
-          }
-
-          const course =
-            await courseRepository.findById(
-              group.courseId,
-            );
-
-          const allTrainees =
-            await traineeRepository.findAll();
-
-          const members =
-            allTrainees.filter((trainee) =>
-              group.traineeIds.includes(
-                trainee.id,
-              ),
-            );
-
-          for (const trainee of members) {
-            const enrollment =
-              trainee.enrollments.find(
-                (item) =>
-                  item.groupId === group.id ||
-                  (item.courseId ===
-                    group.courseId &&
-                    !item.groupId),
-              );
-
-            if (!enrollment) {
-              continue;
-            }
-
-            const certificate =
-              await traineeRepository.issueCertificateIfEligible(
-                trainee.id,
-                enrollment.id ??
-                  enrollment.courseId,
-              );
-
-            if (certificate) {
-              views.push({
-                trainee,
-                certificate,
-                course,
-              });
-            }
-          }
-        } else {
-          const trainee = traineeId
-            ? await traineeRepository.findById(
-                traineeId,
-              )
-            : await traineeRepository.getCurrentUser();
-
-          if (!trainee) {
-            throw new Error(
-              'المتدرب غير موجود.',
-            );
-          }
-
-          const enrollment = courseId
-            ? trainee.enrollments.find(
-                (item) =>
-                  item.courseId === courseId,
-              )
-            : trainee.enrollments.find(
-                (item) => item.certificateId,
-              );
-
-          if (!enrollment) {
-            throw new Error(
-              'الدورة غير موجودة لدى المتدرب.',
-            );
-          }
-
-          const certificate =
-            await traineeRepository.issueCertificateIfEligible(
-              trainee.id,
-              enrollment.id ??
-                enrollment.courseId,
-            );
-
-          const existing =
-            certificate ??
-            trainee.certificates.find(
-              (item) =>
-                item.courseId ===
-                enrollment.courseId,
-            );
-
-          if (!existing) {
-            throw new Error(
-              'الشهادة غير متاحة بعد. أكمل متطلبات الدورة أولاً.',
-            );
-          }
-
-          const course =
-            await courseRepository.findById(
-              enrollment.courseId,
-            );
-
-          views.push({
-            trainee,
-            certificate: existing,
-            course,
-          });
+        const query = new URLSearchParams();
+        if (courseId) query.set('courseId', courseId);
+        if (enrollmentId) query.set('enrollmentId', enrollmentId);
+        if (traineeId) query.set('traineeId', traineeId);
+        if (groupId || adminMode) {
+          query.set('admin', 'true');
         }
+        if (groupId) {
+          query.set('groupId', groupId);
+        }
+
+        const response = await fetch(
+          `/api/certificates?${query.toString()}`,
+          {
+            cache: 'no-store',
+            headers: {
+              'x-trainee-id':
+                document.cookie
+                  .split('; ')
+                  .find((item) => item.startsWith('impact_sql_trainee='))
+                  ?.split('=')
+                  .slice(1)
+                  .join('=') || '',
+            },
+          },
+        );
+        const data = await response.json().catch(() => null);
+
+        const settingsResponse = await fetch('/api/settings', {
+          cache: 'no-store',
+        });
+        const settingsData = await settingsResponse
+          .json()
+          .catch(() => null);
+        const certificateSettings =
+          settingsData?.settings?.certificate ?? {};
+        const generalSettings =
+          settingsData?.settings?.general ?? {};
+
+        const arabicJobTitle =
+          certificateSettings.jobTitleArabic ??
+          generalSettings.jobTitleArabic;
+        const englishJobTitle =
+          certificateSettings.jobTitleEnglish ??
+          generalSettings.jobTitleEnglish;
+
+        if (!response.ok || !data?.success) {
+          throw new Error(
+            data?.error || 'الشهادة غير متاحة بعد. أكمل متطلبات الدورة أولاً.',
+          );
+        }
+
+        const views: CertificateView[] = (data.items ?? []).map(
+          (item: any) => ({
+            trainee: {
+              id: item.trainee.id,
+              profile: {
+                firstName: item.trainee.firstName ?? '',
+                lastName: item.trainee.lastName ?? '',
+                firstNameEnglish: item.trainee.firstNameEnglish ?? undefined,
+                lastNameEnglish: item.trainee.lastNameEnglish ?? undefined,
+              },
+              email: item.trainee.email ?? '',
+            } as unknown as Trainee,
+            certificate: item.certificate as Certificate,
+            course: item.course as Course,
+            enrollment: item.enrollment ?? {},
+          }),
+        );
 
         if (!active) {
           return;
@@ -455,6 +391,16 @@ export default function CertificatePage() {
         }
 
         setItems(views);
+        setJobTitles({
+          ar:
+            typeof arabicJobTitle === 'string' && arabicJobTitle.trim()
+              ? arabicJobTitle.trim()
+              : 'الرئيس التنفيذي',
+          en:
+            typeof englishJobTitle === 'string' && englishJobTitle.trim()
+              ? englishJobTitle.trim()
+              : 'CEO',
+        });
         setLoading(false);
       } catch (loadError) {
         console.error(
@@ -481,7 +427,7 @@ export default function CertificatePage() {
     return () => {
       active = false;
     };
-  }, [courseId, traineeId, groupId]);
+  }, [courseId, enrollmentId, traineeId, groupId, adminMode]);
 
   useEffect(() => {
     if (
@@ -593,13 +539,29 @@ export default function CertificatePage() {
         </div>
       </div>
 
+      {adminMode && items.length > 1 && (
+        <div className="certificate-index" dir="rtl">
+          {items.map((item, index) => (
+            <a
+              key={item.certificate.id}
+              href={`#certificate-${item.certificate.id}`}
+              className="certificate-index-link"
+            >
+              الشهادة {index + 1}: {item.course?.title || item.certificate.courseTitle}
+            </a>
+          ))}
+        </div>
+      )}
+
       {items.map((item) => (
         <div
           key={`${item.trainee.id}-${item.certificate.id}`}
+          id={`certificate-${item.certificate.id}`}
         >
           <CertificateSheet
             item={item}
             language={language}
+            jobTitle={language === 'ar' ? jobTitles.ar : jobTitles.en}
           />
         </div>
       ))}
@@ -734,8 +696,6 @@ export default function CertificatePage() {
 
         .certificate-ar .certificate-title {
           font-family:
-            'Randly',
-            'IBM Plex Sans Arabic',
             Arial,
             sans-serif;
 
@@ -749,13 +709,12 @@ export default function CertificatePage() {
             'Randly',
             'Times New Roman',
             Georgia,
-            serif;
+            Arial,
+            sans-serif;
 
           font-size: 45px;
 
           font-weight: 500;
-
-          direction: ltr;
         }
 
         .field {
@@ -778,7 +737,6 @@ export default function CertificatePage() {
           direction: rtl;
 
           font-family:
-            'IBM Plex Sans Arabic',
             Arial,
             sans-serif;
 
@@ -786,6 +744,11 @@ export default function CertificatePage() {
 
           text-rendering:
             geometricPrecision;
+        }
+
+        .certificate-ar .certificate-info,
+        .certificate-ar .certificate-number {
+          font-family: Arial, sans-serif;
         }
 
         /* =========================
@@ -868,6 +831,68 @@ export default function CertificatePage() {
           direction: ltr;
         }
 
+        .certificate-en,
+        .certificate-en .field,
+        .certificate-en .certificate-info,
+        .certificate-en .certificate-number {
+          font-family:
+            'Randly',
+            'Times New Roman',
+            Georgia,
+            serif;
+        }
+
+        .certificate-job-title {
+          position: absolute;
+
+          z-index: 5;
+
+          left: 64%;
+
+          bottom: 12%;
+
+          width: 22%;
+
+          transform: translateX(-50%);
+
+          color: #0B2E67;
+
+          font-size: 15px;
+
+          font-weight: 500;
+
+          text-align: center;
+
+          white-space: nowrap;
+        }
+
+        .certificate-ar .certificate-job-title {
+          font-family: Arial, sans-serif;
+        }
+
+        .certificate-en .certificate-job-title {
+          font-family:
+            'Randly',
+            'Times New Roman',
+            Georgia,
+            serif;
+          direction: ltr;
+        }
+
+        .certificate-index {
+          max-width: 1200px;
+          margin: 0 auto 18px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .certificate-index-link {
+          color: #062b67;
+          font-size: 13px;
+          text-decoration: underline;
+        }
+
         .certificate-en .intro-text {
           top: 31%;
 
@@ -941,7 +966,7 @@ export default function CertificatePage() {
 
           z-index: 5;
 
-          top: 57.2%;
+          top: 56.2%;
 
           left: 50%;
 
@@ -995,11 +1020,11 @@ export default function CertificatePage() {
 
           font-weight: 400;
 
-          margin: 0 auto 7px;
+          margin: 0 auto 3px;
 
-          padding: 0 8px 6px;
+          padding: 0 8px 0;
 
-          border-bottom: 1.5px solid #B48732;
+          border-bottom: 0;
 
           white-space: nowrap;
 
@@ -1070,7 +1095,7 @@ export default function CertificatePage() {
 
           z-index: 5;
 
-          bottom: 6.5%;
+          bottom: 10.5%;
 
           left: 50%;
 

@@ -30,11 +30,46 @@ export default function CoursePreparationPage() {
         setCourse(currentCourse);
 
         if (currentCourse && user) {
-          setAllowed(
-            user.enrollments.some(
-              (enrollment) => enrollment.courseId === currentCourse.id,
-            ),
-          );
+          let sqlEnrolled = false;
+
+const sqlTraineeId =
+  document.cookie
+    .split('; ')
+    .find((item) =>
+      item.startsWith('impact_sql_trainee='),
+    )
+    ?.split('=')
+    .slice(1)
+    .join('=') || '';
+
+if (sqlTraineeId) {
+  try {
+    const response = await fetch(
+      `/api/enrollments?traineeId=${encodeURIComponent(
+        sqlTraineeId,
+      )}`,
+      {
+        cache: 'no-store',
+      },
+    );
+
+    const result = await response.json().catch(() => null);
+
+    if (response.ok && result?.success) {
+      sqlEnrolled = (result.enrollments ?? []).some(
+        (enrollment: any) =>
+          enrollment.courseId === currentCourse.id,
+      );
+    }
+  } catch (error) {
+    console.error(
+      'Failed to check SQL enrollment:',
+      error,
+    );
+  }
+}
+
+setAllowed(sqlEnrolled);
         }
       } catch (error) {
         console.error('Failed to load course preparation:', error);

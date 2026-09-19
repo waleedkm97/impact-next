@@ -249,11 +249,23 @@ export default function RecordedCourseAssessmentsPage() {
             // client-side repository. There is no GET /api/courses/[id] route.
             const courseData = await courseRepository.findById(courseId);
 
-            if (!courseData) {
+            const sqlCourseResponse = await fetch(
+                `/api/courses?id=${encodeURIComponent(courseId)}`,
+                { cache: 'no-store' },
+            );
+            const sqlCourseData = await sqlCourseResponse
+                .json()
+                .catch(() => null);
+            const currentCourse =
+                sqlCourseResponse.ok && sqlCourseData?.success
+                    ? sqlCourseData.course
+                    : courseData;
+
+            if (!currentCourse) {
                 throw new Error('تعذر تحميل بيانات الدورة.');
             }
 
-            setCourse(courseData);
+            setCourse(currentCourse);
 
             const assessmentsResponse = await fetch(
                 `/api/assessments?courseId=${encodeURIComponent(courseId)}`,
@@ -640,39 +652,57 @@ export default function RecordedCourseAssessmentsPage() {
         }
     }
 
-    async function toggleAssessmentAccess(type: 'post' | 'evaluation') {
-        if (!courseId || !course) return;
+ async function toggleAssessmentAccess(type: 'post' | 'evaluation') {
+    if (!courseId || !course) return;
 
-        const field =
-            type === 'post'
-                ? 'postAssessmentEnabled'
-                : 'courseEvaluationEnabled';
+    const field =
+        type === 'post'
+            ? 'postAssessmentEnabled'
+            : 'courseEvaluationEnabled';
 
-        const currentValue =
-            type === 'post'
-                ? course.postAssessmentEnabled === true
-                : course.courseEvaluationEnabled === true;
+    const currentValue =
+        type === 'post'
+            ? course.postAssessmentEnabled === true
+            : course.courseEvaluationEnabled === true;
 
-        setTogglingAccess(type);
+    setTogglingAccess(type);
 
-        try {
-            const updatedCourse = await courseRepository.update(courseId, {
+    try {
+        const response = await fetch('/api/courses', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                id: courseId,
                 [field]: !currentValue,
-            });
+            }),
+        });
 
-            setCourse(updatedCourse);
-        } catch (error) {
-            console.error('Failed to update assessment access:', error);
+        const data = await response.json().catch(() => null);
 
-            alert(
-                error instanceof Error
-                    ? error.message
-                    : 'تعذر تغيير حالة التقييم.',
+        if (!response.ok || !data?.success) {
+            throw new Error(
+                data?.error ?? 'تعذر تغيير حالة التقييم.',
             );
-        } finally {
-            setTogglingAccess(null);
         }
+
+        setCourse((current: any) => ({
+            ...current,
+            [field]: !currentValue,
+        }));
+    } catch (error) {
+        console.error('Failed to update assessment access:', error);
+
+        alert(
+            error instanceof Error
+                ? error.message
+                : 'تعذر تغيير حالة التقييم.',
+        );
+    } finally {
+        setTogglingAccess(null);
     }
+}
 
     if (loading) {
         return (

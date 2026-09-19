@@ -93,11 +93,20 @@ export default function CoordinatorPage() {
       return;
     }
 
-    const [allGroups, allTrainees, allStaff] = await Promise.all([
-      groupRepository.findAll(),
+    const [groupsResponse, allTrainees, allStaff] = await Promise.all([
+      fetch('/api/groups', { cache: 'no-store' }),
       traineeRepository.findAll(),
       staffRepository.findAll(),
     ]);
+
+    const allGroups: TrainingGroup[] = groupsResponse.ok
+      ? (await groupsResponse.json()).map((group: any) => ({
+          ...group,
+          traineeIds: Array.isArray(group.traineeIds) ? group.traineeIds : [],
+          createdAt: new Date(group.createdAt),
+          updatedAt: new Date(group.updatedAt),
+        }))
+      : [];
 
     setStaff(currentStaff);
 
@@ -169,16 +178,19 @@ export default function CoordinatorPage() {
       const nextEnabled =
         !current[type].enabled;
 
-      const assessmentField =
-        type === 'post'
-          ? 'postAssessment'
-          : 'courseEvaluation';
-
-      await groupRepository.setAssessmentForGroup(
-        selectedGroup.id,
-        assessmentField,
-        nextEnabled ? 'available' : 'locked',
+      const response = await fetch(
+        `/api/groups/${encodeURIComponent(selectedGroup.id)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, enabled: nextEnabled }),
+        },
       );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'تعذر تحديث إتاحة تقييم المجموعة.');
+      }
 
       await load();
     } catch (error) {

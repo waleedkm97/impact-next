@@ -55,12 +55,22 @@ const [editingId, setEditingId] = useState<string | null>(null);
 const [form, setForm] = useState<OrderForm>(initialForm);
 
   async function load() {
-    const [orderList, courseList, scheduleList] = await Promise.all([
-      orderRepository.findAll(),
+    const [orderResponse, courseList, scheduleList] = await Promise.all([
+      fetch('/api/orders', { cache: 'no-store' }),
       courseRepository.findAll(),
-      scheduleRepository.findAll({ filter: { published: true }, sort: 'startDate', order: 'asc' }),
+      scheduleRepository.findAll({
+        filter: { published: true },
+        sort: 'startDate',
+        order: 'asc',
+      }),
     ]);
 
+    if (!orderResponse.ok) {
+      throw new Error('تعذر تحميل الطلبات.');
+    }
+
+    const orderData = await orderResponse.json();
+    const orderList = orderData.orders ?? [];
     setOrders(orderList);
     setCourses(courseList);
     setSchedules(scheduleList);
@@ -78,7 +88,22 @@ const [form, setForm] = useState<OrderForm>(initialForm);
   }, []);
 
   async function approve(id: string) {
-    await orderRepository.confirmOrder(id);
+    const response = await fetch(`/api/orders/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'confirmed',
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      alert(data?.error || 'تعذر اعتماد الطلب.');
+      return;
+    }
+
     await load();
   }
 

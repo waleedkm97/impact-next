@@ -47,38 +47,98 @@ export default function Account() {
           return;
         }
 
-        const courseEntries = await Promise.all(
-          currentUser.enrollments.map(async (enrollment) => {
-            const course = await courseRepository.findById(
-              enrollment.courseId,
-            );
+        const sqlTraineeCookie =
+  document.cookie
+    .split('; ')
+    .find((item) =>
+      item.startsWith(
+        'impact_sql_trainee=',
+      ),
+    );
 
-            return [enrollment.courseId, course] as const;
-          }),
-        );
+const sqlTraineeId =
+  sqlTraineeCookie
+    ? decodeURIComponent(
+        sqlTraineeCookie
+          .split('=')
+          .slice(1)
+          .join('='),
+      )
+    : '';
 
-        const scheduleEntries = await Promise.all(
-          currentUser.enrollments
-            .filter((enrollment) => Boolean(enrollment.scheduleId))
-            .map(async (enrollment) => {
-              const schedule = await scheduleRepository.findById(
-                enrollment.scheduleId as string,
-              );
+if (!sqlTraineeId) {
+  throw new Error(
+    'تعذر تحديد معرف المتدرب في قاعدة البيانات.',
+  );
+}
 
-              return [enrollment.scheduleId as string, schedule] as const;
-            }),
-        );
+const enrollmentsResponse =
+  await fetch(
+    `/api/enrollments?traineeId=${encodeURIComponent(
+      sqlTraineeId,
+    )}`,
+    {
+      cache: 'no-store',
+    },
+  );
 
-        const groupEntries = await Promise.all(
-          currentUser.enrollments
-            .filter((enrollment) => Boolean(enrollment.groupId))
-            .map(async (enrollment) => {
-              const group = await groupRepository.findById(
-                enrollment.groupId as string,
-              );
-              return [enrollment.groupId as string, group] as const;
-            }),
-        );
+const enrollmentsResult =
+  await enrollmentsResponse
+    .json()
+    .catch(() => null);
+
+if (
+  !enrollmentsResponse.ok ||
+  !enrollmentsResult?.success
+) {
+  throw new Error(
+    enrollmentsResult?.error ||
+      'تعذر تحميل دورات المتدرب.',
+  );
+}
+
+const sqlEnrollments =
+  Array.isArray(
+    enrollmentsResult.enrollments,
+  )
+    ? enrollmentsResult.enrollments
+    : [];
+
+const courseEntries =
+  sqlEnrollments.map(
+    (enrollment: any) => [
+      enrollment.courseId,
+      enrollment.course,
+    ] as const,
+  );
+
+const scheduleEntries =
+  sqlEnrollments
+    .filter(
+      (enrollment: any) =>
+        Boolean(enrollment.scheduleId) &&
+        enrollment.schedule,
+    )
+    .map(
+      (enrollment: any) => [
+        enrollment.scheduleId,
+        enrollment.schedule,
+      ] as const,
+    );
+
+const groupEntries =
+  sqlEnrollments
+    .filter(
+      (enrollment: any) =>
+        Boolean(enrollment.groupId) &&
+        enrollment.group,
+    )
+    .map(
+      (enrollment: any) => [
+        enrollment.groupId,
+        enrollment.group,
+      ] as const,
+    );
 
 
         if (!active) return;
@@ -90,7 +150,10 @@ export default function Account() {
         const refreshedUser =
           await traineeRepository.findById(currentUser.id);
 
-        setUser(refreshedUser ?? currentUser);
+        setUser({
+  ...(refreshedUser ?? currentUser),
+  enrollments: sqlEnrollments,
+});
         setCourses(Object.fromEntries(courseEntries));
         setSchedules(Object.fromEntries(scheduleEntries));
         setGroups(Object.fromEntries(groupEntries));

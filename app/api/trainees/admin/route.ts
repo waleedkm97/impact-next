@@ -237,29 +237,148 @@ export async function DELETE(request: Request) {
   try {
     const body = await request.json();
 
-    const id = typeof body.id === 'string' ? body.id.trim() : '';
+    const id =
+      typeof body.id === 'string'
+        ? body.id.trim()
+        : '';
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: 'معرف المتدرب مطلوب.' },
+        {
+          success: false,
+          error: 'معرف المتدرب مطلوب.',
+        },
         { status: 400 },
       );
     }
 
-    await prisma.trainee.delete({
-      where: { id },
+    const trainee =
+      await prisma.trainee.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (!trainee) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'المتدرب غير موجود.',
+        },
+        { status: 404 },
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const enrollments =
+        await tx.courseEnrollment.findMany({
+          where: {
+            traineeId: id,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      const enrollmentIds =
+        enrollments.map(
+          (item) => item.id,
+        );
+
+      if (enrollmentIds.length > 0) {
+        await tx.attendanceDay.deleteMany({
+          where: {
+            enrollmentId: {
+              in: enrollmentIds,
+            },
+          },
+        });
+
+        await tx.courseProgress.deleteMany({
+          where: {
+            enrollmentId: {
+              in: enrollmentIds,
+            },
+          },
+        });
+
+        await tx.certificate.deleteMany({
+          where: {
+            enrollmentId: {
+              in: enrollmentIds,
+            },
+          },
+        });
+      }
+
+      await tx.courseProgress.deleteMany({
+        where: {
+          traineeId: id,
+        },
+      });
+
+      await tx.certificate.deleteMany({
+        where: {
+          traineeId: id,
+        },
+      });
+
+      await tx.groupTrainee.deleteMany({
+        where: {
+          traineeId: id,
+        },
+      });
+
+      await tx.couponUsage.deleteMany({
+        where: {
+          traineeId: id,
+        },
+      });
+
+      await tx.passwordResetToken.deleteMany({
+        where: {
+          traineeId: id,
+        },
+      });
+
+      await tx.courseEnrollment.deleteMany({
+        where: {
+          traineeId: id,
+        },
+      });
+
+      await tx.order.deleteMany({
+        where: {
+          traineeId: id,
+        },
+      });
+
+      await tx.trainee.delete({
+        where: {
+          id,
+        },
+      });
     });
 
     return NextResponse.json({
       success: true,
     });
   } catch (error) {
-    console.error('Admin trainee delete error:', error);
+    console.error(
+      'Admin trainee delete error:',
+      error,
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: 'حدث خطأ أثناء حذف المتدرب.',
+        error:
+          error instanceof Error
+            ? error.message
+            : 'تعذر حذف المتدرب وجميع بياناته المرتبطة.',
       },
       { status: 500 },
     );

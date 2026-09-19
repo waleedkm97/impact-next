@@ -603,7 +603,7 @@ if (!sqlResponse.ok) {
       return;
     }
 
-    await groupRepository.update(
+        await groupRepository.update(
       editingId,
       {
         name:
@@ -650,6 +650,67 @@ if (!sqlResponse.ok) {
       },
     );
 
+    const sqlResponse = await fetch(
+      `/api/groups/${encodeURIComponent(editingId)}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name:
+            form.name.trim() ||
+            form.companyName.trim() ||
+            `مجموعة ${course.title}`,
+
+          courseId: course.id,
+
+          courseTitle: course.title,
+
+          corporateDate:
+            form.corporateDate || null,
+
+          corporateDelivery:
+            form.corporateDelivery,
+
+          corporateLocation:
+            form.corporateLocation.trim() ||
+            null,
+
+          materialUrl:
+            form.materialUrl || null,
+
+          companyName:
+            form.companyName.trim() || null,
+
+          responsibleName:
+            form.responsibleName.trim() || null,
+
+          responsibleEmail:
+            form.responsibleEmail.trim() ||
+            null,
+
+          responsiblePhone:
+            form.responsiblePhone.trim() ||
+            null,
+
+          notes:
+            form.notes.trim() || null,
+        }),
+      },
+    );
+
+    if (!sqlResponse.ok) {
+      const result = await sqlResponse
+        .json()
+        .catch(() => null);
+
+      throw new Error(
+        result?.error ||
+          'تم تعديل المجموعة محليًا ولكن تعذر حفظ التعديل في قاعدة البيانات.',
+      );
+    }
+
     setOpen(false);
     setEditingId(null);
 
@@ -690,10 +751,35 @@ if (!sqlResponse.ok) {
     setSavingAssignment(true);
 
     try {
-      await groupRepository.update(selectedGroup.id, {
+            await groupRepository.update(selectedGroup.id, {
         trainerId: assignmentTrainerId || undefined,
         coordinatorId: assignmentCoordinatorId || undefined,
       });
+
+      const sqlResponse = await fetch(
+        `/api/groups/${encodeURIComponent(selectedGroup.id)}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            trainerId: assignmentTrainerId || null,
+            coordinatorId: assignmentCoordinatorId || null,
+          }),
+        },
+      );
+
+      if (!sqlResponse.ok) {
+        const result = await sqlResponse
+          .json()
+          .catch(() => null);
+
+        throw new Error(
+          result?.error ||
+            'تم حفظ التعيين محليًا ولكن تعذر حفظه في قاعدة البيانات.',
+        );
+      }
 
       await load();
       alert('تم حفظ المدرب والمنسق للمجموعة.');
@@ -724,7 +810,23 @@ if (!sqlResponse.ok) {
     await groupRepository.delete(
       selectedGroup.id,
     );
+    const sqlResponse = await fetch(
+      `/api/groups/${encodeURIComponent(selectedGroup.id)}`,
+      {
+        method: 'DELETE',
+      },
+    );
 
+    if (!sqlResponse.ok) {
+      const result = await sqlResponse
+        .json()
+        .catch(() => null);
+
+      throw new Error(
+        result?.error ||
+          'تم حذف المجموعة محليًا ولكن تعذر حذفها من قاعدة البيانات.',
+      );
+    }
     setSelectedGroupId('');
 
     await load();
@@ -782,12 +884,36 @@ if (!sqlResponse.ok) {
   ) {
     if (!selectedGroupId) return;
 
-    await groupRepository.removeTrainee(
-      selectedGroupId,
-      traineeId,
-    );
+   await groupRepository.removeTrainee(
+  selectedGroupId,
+  traineeId,
+);
 
-    await load();
+const sqlResponse = await fetch(
+  `/api/groups/${encodeURIComponent(selectedGroupId)}/trainees`,
+  {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      traineeId,
+    }),
+  },
+);
+
+if (!sqlResponse.ok) {
+  const result = await sqlResponse
+    .json()
+    .catch(() => null);
+
+  throw new Error(
+    result?.error ||
+      'تم حذف المتدرب محليًا ولكن تعذر حذفه من قاعدة البيانات.',
+  );
+}
+
+await load();
   }
 
   /*
@@ -840,18 +966,21 @@ if (!sqlResponse.ok) {
         };
       }
 
-      const assessmentField =
-        type === 'pre'
-          ? 'preAssessment'
-          : type === 'post'
-            ? 'postAssessment'
-            : 'courseEvaluation';
+      if (type === 'pre') return;
 
-      await groupRepository.setAssessmentForGroup(
-        selectedGroup.id,
-        assessmentField,
-        next[type].enabled ? 'available' : 'locked',
+      const response = await fetch(
+        `/api/groups/${encodeURIComponent(selectedGroup.id)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, enabled: next[type].enabled }),
+        },
       );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'تعذر تحديث إتاحة تقييم المجموعة.');
+      }
 
       await load();
     } catch (error) {

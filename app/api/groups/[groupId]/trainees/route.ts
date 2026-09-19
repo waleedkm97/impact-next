@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { initialAssessmentStates } from '@/lib/assessment-access';
 
 type Params = {
   params: Promise<{ groupId: string }>;
@@ -24,6 +25,7 @@ export async function POST(request: Request, { params }: Params) {
 
     const group = await prisma.trainingGroup.findUnique({
       where: { id: groupId },
+      include: { course: { include: { assessments: { select: { assessmentType: true } } } } },
     });
 
     if (!group) {
@@ -72,6 +74,15 @@ export async function POST(request: Request, { params }: Params) {
       },
     });
 
+    const states = initialAssessmentStates({
+      assessmentTypes: group.course.assessments.flatMap((item) =>
+        item.assessmentType === 'pre' || item.assessmentType === 'post' || item.assessmentType === 'evaluation' ? [item.assessmentType] : [],
+      ),
+      enrollment: { groupId },
+      course: group.course,
+      group,
+    });
+
     const enrollment =
       existingEnrollment ??
       (await prisma.courseEnrollment.create({
@@ -81,6 +92,9 @@ export async function POST(request: Request, { params }: Params) {
           courseId: group.courseId,
           courseTitle: group.courseTitle,
           groupId,
+          status: 'active',
+          progress: 0,
+          ...states,
         },
       }));
 
@@ -97,6 +111,79 @@ export async function POST(request: Request, { params }: Params) {
         error: 'Failed to add trainee to group',
       },
       { status: 500 },
+    );
+  }
+}
+export async function DELETE(
+  request: Request,
+  {
+    params,
+  }: {
+    params: Promise<{ groupId: string }>;
+  },
+) {
+  try {
+    const { groupId } = await params;
+    const body = await request.json();
+
+    if (!body.traineeId) {
+      return NextResponse.json(
+        {
+          error: 'معرف المتدرب مطلوب.',
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const membership =
+      await prisma.groupTrainee.findUnique({
+        where: {
+          groupId_traineeId: {
+            groupId,
+            traineeId: body.traineeId,
+          },
+        },
+      });
+
+    if (!membership) {
+      return NextResponse.json(
+        {
+          error: 'المتدرب غير موجود في المجموعة.',
+        },
+        {
+          status: 404,
+        },
+      );
+    }
+
+    await prisma.groupTrainee.delete({
+      where: {
+        groupId_traineeId: {
+          groupId,
+          traineeId: body.traineeId,
+        },
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error(
+      'DELETE /api/groups/[groupId]/trainees error:',
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          'تعذر حذف المتدرب من المجموعة في قاعدة البيانات.',
+      },
+      {
+        status: 500,
+      },
     );
   }
 }

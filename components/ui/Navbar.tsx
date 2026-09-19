@@ -54,6 +54,7 @@ export default function Navbar() {
           <Link href="/">الرئيسية</Link>
           <Link href="/recorded-courses">الدورات المسجلة</Link>
           <Link href="/training-courses">الدورات التدريبية</Link>
+          <Link href="/verify-certificate">التحقق من الشهادة</Link>
           <Link href="/services">الخدمات</Link>
           <Link href="/contact">تواصل معنا</Link>
         </div>

@@ -21,6 +21,55 @@ const UNIFIED_EVALUATION_QUESTIONS = [
   'ما رأيك أو اقتراحاتك لتحسين البرنامج؟',
 ];
 
+export async function GET(request: Request) {
+  try {
+    const courseId = new URL(request.url).searchParams.get('id')?.trim();
+
+    if (!courseId) {
+      return Response.json(
+        { success: false, error: 'معرف الدورة مطلوب.' },
+        { status: 400 },
+      );
+    }
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        assessments: {
+          include: {
+            questions: {
+              orderBy: { order: 'asc' },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!course) {
+      return Response.json(
+        { success: false, error: 'الدورة غير موجودة.' },
+        { status: 404 },
+      );
+    }
+
+    return Response.json({
+      success: true,
+      course,
+    });
+  } catch (error) {
+    console.error('GET /api/courses error:', error);
+
+    return Response.json(
+      {
+        success: false,
+        error: 'تعذر تحميل الدورة من قاعدة البيانات.',
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -268,6 +317,99 @@ export async function POST(request: Request) {
           error instanceof Error
             ? error.message
             : 'Failed to save course',
+      },
+      { status: 500 },
+    );
+  }
+}
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+
+    const courseId = String(
+      body?.id || '',
+    ).trim();
+
+    if (!courseId) {
+      return Response.json(
+        {
+          success: false,
+          error: 'معرف الدورة مطلوب.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const data: Record<string, boolean> = {};
+
+    if (
+      typeof body.preAssessmentEnabled ===
+      'boolean'
+    ) {
+      data.preAssessmentEnabled =
+        body.preAssessmentEnabled;
+    }
+
+    if (
+      typeof body.postAssessmentEnabled ===
+      'boolean'
+    ) {
+      data.postAssessmentEnabled =
+        body.postAssessmentEnabled;
+    }
+
+    if (
+      typeof body.courseEvaluationEnabled ===
+      'boolean'
+    ) {
+      data.courseEvaluationEnabled =
+        body.courseEvaluationEnabled;
+    }
+
+    if (
+      typeof body.attendanceEnabled ===
+      'boolean'
+    ) {
+      data.attendanceEnabled =
+        body.attendanceEnabled;
+    }
+
+    if (!Object.keys(data).length) {
+      return Response.json(
+        {
+          success: false,
+          error:
+            'لم يتم إرسال أي إعداد للتحديث.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const course =
+      await prisma.course.update({
+        where: {
+          id: courseId,
+        },
+        data,
+      });
+
+    return Response.json({
+      success: true,
+      course,
+    });
+  } catch (error) {
+    console.error(
+      'PATCH /api/courses error:',
+      error,
+    );
+
+    return Response.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'تعذر تحديث إعدادات الدورة.',
       },
       { status: 500 },
     );

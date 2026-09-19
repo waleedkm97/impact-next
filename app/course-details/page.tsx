@@ -8,16 +8,26 @@ import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import type { Course } from '@/types/course';
 
 export default function CourseDetails() {
-  const id = useSearchParams().get('id') || '';
-  const [course, setCourse] = useState<Course | null>(null);
-  const [enrolled, setEnrolled] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const id =
+    useSearchParams().get('id') || '';
+
+  const [course, setCourse] =
+    useState<Course | null>(null);
+
+  const [enrolled, setEnrolled] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
     let active = true;
 
     async function load() {
-      const [currentCourse, user] = await Promise.all([
+      const [
+        currentCourse,
+        user,
+      ] = await Promise.all([
         courseRepository.findById(id),
         traineeRepository.getCurrentUser(),
       ]);
@@ -28,15 +38,65 @@ export default function CourseDetails() {
 
       setCourse(currentCourse);
 
+      let sqlEnrolled = false;
+
       if (currentCourse && user) {
-        setEnrolled(
-          user.enrollments.some(
-            (enrollment) => enrollment.courseId === currentCourse.id,
-          ),
-        );
+        const sqlTraineeId =
+          document.cookie
+            .split('; ')
+            .find((item) =>
+              item.startsWith(
+                'impact_sql_trainee=',
+              ),
+            )
+            ?.split('=')
+            .slice(1)
+            .join('=') || '';
+
+        if (sqlTraineeId) {
+          try {
+            const response =
+              await fetch(
+                `/api/enrollments?traineeId=${encodeURIComponent(
+                  sqlTraineeId,
+                )}`,
+                {
+                  cache: 'no-store',
+                },
+              );
+
+            const result =
+              await response
+                .json()
+                .catch(() => null);
+
+            if (
+              response.ok &&
+              result?.success
+            ) {
+              sqlEnrolled =
+                (
+                  result.enrollments ??
+                  []
+                ).some(
+                  (enrollment: any) =>
+                    enrollment.courseId ===
+                    currentCourse.id,
+                );
+            }
+          } catch (error) {
+            console.error(
+              'Failed to check SQL enrollment:',
+              error,
+            );
+          }
+        }
       }
 
-      setLoading(false);
+      if (active) {
+        setEnrolled(sqlEnrolled);
+        setLoading(false);
+      }
     }
 
     void load();
@@ -48,7 +108,10 @@ export default function CourseDetails() {
 
   if (loading) {
     return (
-      <main className="container mx-auto px-6 py-12" dir="rtl">
+      <main
+        className="container mx-auto px-6 py-12"
+        dir="rtl"
+      >
         جاري التحميل...
       </main>
     );
@@ -56,9 +119,18 @@ export default function CourseDetails() {
 
   if (!course) {
     return (
-      <main className="container mx-auto px-6 py-12" dir="rtl">
-        <h1>الدورة غير موجودة</h1>
-        <Link href="/recorded-courses" className="btn-secondary">
+      <main
+        className="container mx-auto px-6 py-12"
+        dir="rtl"
+      >
+        <h1>
+          الدورة غير موجودة
+        </h1>
+
+        <Link
+          href="/recorded-courses"
+          className="btn-secondary"
+        >
           العودة للدورات
         </Link>
       </main>
@@ -66,57 +138,93 @@ export default function CourseDetails() {
   }
 
   return (
-    <main className="container mx-auto px-6 py-12" dir="rtl">
-      <span className="card-label">دورة مسجلة</span>
+    <main
+      className="container mx-auto px-6 py-12"
+      dir="rtl"
+    >
+      <span className="card-label">
+        دورة مسجلة
+      </span>
+
       <h1>{course.title}</h1>
+
       <p>{course.description}</p>
 
       <section className="course-details-section">
         <h2>نبذة عن الدورة</h2>
-        <p>{course.shortDescription || course.description}</p>
+
+        <p>
+          {course.shortDescription ||
+            course.description}
+        </p>
       </section>
 
       <section className="course-details-section">
         <h2>الأهداف</h2>
+
         <ul>
-          {course.objectives.map((objective) => (
-            <li key={objective}>{objective}</li>
-          ))}
+          {course.objectives.map(
+            (objective) => (
+              <li key={objective}>
+                {objective}
+              </li>
+            ),
+          )}
         </ul>
       </section>
 
       <section className="course-details-section">
         <h2>الفئة المستهدفة</h2>
-        <p>{course.audience || 'المهتمون بتطوير مهاراتهم المهنية.'}</p>
+
+        <p>
+          {course.audience ||
+            'المهتمون بتطوير مهاراتهم المهنية.'}
+        </p>
       </section>
 
       <section className="course-details-section">
         <h2>المحتوى</h2>
+
         <ol>
-          {(course.lessons ?? []).map((lesson) => (
-            <li key={lesson.id}>
-              {lesson.title} {lesson.type === 'quiz' ? '— اختبار تفاعلي' : ''}
-            </li>
-          ))}
+          {(course.lessons ?? []).map(
+            (lesson) => (
+              <li key={lesson.id}>
+                {lesson.title}{' '}
+                {lesson.type === 'quiz'
+                  ? '— اختبار تفاعلي'
+                  : ''}
+              </li>
+            ),
+          )}
         </ol>
       </section>
 
       <div className="course-details-purchase">
         <div>
           <span>السعر</span>
-          <strong>{course.price.toLocaleString('ar-SA')} ر.س</strong>
+
+          <strong>
+            {course.price.toLocaleString(
+              'ar-SA',
+            )}{' '}
+            ر.س
+          </strong>
         </div>
 
         {enrolled ? (
           <Link
-            href={`/course-learning?id=${encodeURIComponent(course.id)}`}
+            href={`/course-learning?id=${encodeURIComponent(
+              course.id,
+            )}`}
             className="btn-primary"
           >
             ابدأ التعلم
           </Link>
         ) : (
           <Link
-            href={`/checkout?id=${encodeURIComponent(course.id)}`}
+            href={`/checkout?id=${encodeURIComponent(
+              course.id,
+            )}`}
             className="btn-primary"
           >
             شراء الدورة

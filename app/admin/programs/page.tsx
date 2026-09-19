@@ -442,18 +442,89 @@ export default function ProgramsAdmin() {
   }
 
   async function openAssessments(course: Course) {
+    const response = await fetch(
+      `/api/assessments?courseId=${encodeURIComponent(course.id)}`,
+      { cache: 'no-store' },
+    );
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || !data?.success) {
+      alert(data?.error ?? 'تعذر تحميل تقييمات البرنامج من قاعدة البيانات.');
+      return;
+    }
+
+    let sqlAssessments = Array.isArray(data.assessments)
+      ? data.assessments
+      : [];
+    const sqlTypes = new Set(
+      sqlAssessments.map((assessment: CourseAssessment) => assessment.assessmentType),
+    );
+    const legacyAssessments = (course.assessments ?? []).filter(
+      (assessment) =>
+        assessment.assessmentType &&
+        !sqlTypes.has(assessment.assessmentType),
+    );
+
+    for (const assessment of legacyAssessments) {
+      const syncResponse = await fetch('/api/assessments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: assessment.id,
+          courseId: course.id,
+          assessmentType: assessment.assessmentType,
+          title: assessment.title,
+          description: assessment.description ?? null,
+          passingScore: assessment.passingScore ?? 0,
+          timeLimit: assessment.timeLimit ?? null,
+          questions: (assessment.questions ?? []).map((question, index) => ({
+            id: question.id,
+            question: question.question,
+            type: question.type,
+            options: question.options ?? [],
+            correctAnswer: question.correctAnswer ?? '',
+            explanation: question.explanation ?? null,
+            order: index,
+            points: question.points ?? null,
+          })),
+        }),
+      });
+
+      const syncData = await syncResponse.json().catch(() => null);
+
+      if (!syncResponse.ok || !syncData?.success) {
+        alert(syncData?.error ?? 'تعذر مزامنة التقييم مع قاعدة البيانات.');
+        return;
+      }
+    }
+
+    if (legacyAssessments.length > 0) {
+      const refreshedResponse = await fetch(
+        `/api/assessments?courseId=${encodeURIComponent(course.id)}`,
+        { cache: 'no-store' },
+      );
+      const refreshedData = await refreshedResponse.json().catch(() => null);
+      sqlAssessments = Array.isArray(refreshedData?.assessments)
+        ? refreshedData.assessments
+        : sqlAssessments;
+    }
+
+    const sqlCourse = {
+      ...course,
+      assessments: sqlAssessments,
+    };
     const nextDrafts = emptyDrafts();
 
     (['pre', 'post', 'evaluation'] as AssessmentType[]).forEach((type) => {
-      const existing = getAssessment(course, type);
+      const existing = getAssessment(sqlCourse, type);
 
       nextDrafts[type] =
         type === 'evaluation'
-          ? normalizeEvaluationAssessment(course.id, existing)
-          : existing ?? createAssessment(course.id, type);
+          ? normalizeEvaluationAssessment(sqlCourse.id, existing)
+          : existing ?? createAssessment(sqlCourse.id, type);
     });
 
-    setAssessmentCourse(course);
+    setAssessmentCourse(sqlCourse);
     setDrafts(nextDrafts);
     const courseSchedules = await scheduleRepository.findByCourseId(course.id);
     setAssessmentSchedules(courseSchedules);
@@ -480,14 +551,38 @@ export default function ProgramsAdmin() {
     setAssessmentAccessSaving(type);
     try {
       const updatedSchedules = await Promise.all(
-        assessmentSchedules.map((schedule) =>
-          scheduleRepository.update(schedule.id, {
-            [field]: nextValue,
-          } as Partial<Schedule>),
-        ),
-      );
+  assessmentSchedules.map(async (schedule) => {
+    const response = await fetch('/api/schedules', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        id: schedule.id,
+        [field]: nextValue,
+      }),
+    });
 
-      setAssessmentSchedules(updatedSchedules);
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || !data?.success) {
+      throw new Error(
+        data?.error ?? 'تعذر تحديث إتاحة التقييم.',
+      );
+    }
+
+    await scheduleRepository.update(schedule.id, {
+      [field]: nextValue,
+    } as Partial<Schedule>);
+
+    return {
+      ...schedule,
+      [field]: nextValue,
+    };
+  }),
+);
+
+setAssessmentSchedules(updatedSchedules);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'تعذر تحديث إتاحة التقييم.');
     } finally {
@@ -823,114 +918,6 @@ export default function ProgramsAdmin() {
         }
       });
 
-      async function saveAssessments() {
-  if (!assessmentCourse) return;
-
-  const error = (
-    ['pre', 'post', 'evaluation'] as AssessmentType[]
-  )
-    .map((type) => drafts[type])
-    .filter(Boolean)
-    .map((assessment, index) =>
-      validateQuestions(
-        assessment!,
-        (['pre', 'post', 'evaluation'] as AssessmentType[])[index],
-      ),
-    )
-    .find(Boolean);
-
-  if (error) {
-    alert(error);
-    return;
-  }
-
-  setAssessmentSaving(true);
-
-  try {
-    const existingAssessments = Array.isArray(
-      (assessmentCourse as any).assessments,
-    )
-      ? [...(assessmentCourse as any).assessments]
-      : [];
-
-    const nextAssessments = (
-      ['pre', 'post', 'evaluation'] as AssessmentType[]
-    ).map((type) => {
-      const draft =
-        type === 'evaluation'
-          ? normalizeEvaluationAssessment(
-              assessmentCourse.id,
-              drafts.evaluation,
-            )
-          : drafts[type]!;
-
-      return {
-        ...draft,
-        assessmentType: type,
-        courseId: assessmentCourse.id,
-        questions: draft.questions.map((question, index) => ({
-          ...question,
-          lessonId: draft.id,
-          order: index,
-        })),
-        updatedAt: new Date(),
-      };
-    });
-
-    /*
-     * حفظ التقييمات محليًا كما كان سابقًا
-     */
-    nextAssessments.forEach((assessment) => {
-      const index = existingAssessments.findIndex(
-        (item: any) =>
-          item.id === assessment.id ||
-          item.assessmentType === assessment.assessmentType,
-      );
-
-      if (index >= 0) {
-        existingAssessments[index] = assessment;
-      } else {
-        existingAssessments.push(assessment);
-      }
-    });
-
-   for (const assessment of nextAssessments) {
-  const response = await fetch('/api/assessments', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      id: assessment.id,
-      courseId: assessmentCourse.id,
-      assessmentType: assessment.assessmentType,
-      title: assessment.title,
-      description: assessment.description ?? null,
-      passingScore: assessment.passingScore ?? 0,
-      timeLimit: assessment.timeLimit ?? null,
-      questions: assessment.questions.map((question, index) => ({
-        id: question.id,
-        question: question.question,
-        type: question.type,
-        options: question.options ?? [],
-        correctAnswer: question.correctAnswer ?? '',
-        explanation: question.explanation ?? null,
-        order: index,
-        points: question.points ?? null,
-      })),
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok || !data?.success) {
-    throw new Error(data?.error ?? 'تعذر حفظ التقييم.');
-  }
-}
-
-    /*
-     * حفظ نفس التقييمات في SQL
-     */
     for (const assessment of nextAssessments) {
       const response = await fetch('/api/assessments', {
         method: 'POST',
@@ -945,13 +932,14 @@ export default function ProgramsAdmin() {
           description: assessment.description,
           passingScore: assessment.passingScore ?? 0,
           timeLimit: assessment.timeLimit ?? null,
-          questions: assessment.questions.map((question) => ({
+          questions: assessment.questions.map((question, index) => ({
             id: question.id,
             question: question.question,
             type: question.type,
             options: question.options ?? [],
             correctAnswer: question.correctAnswer ?? '',
             explanation: question.explanation ?? '',
+            order: index,
             points: question.points ?? 0,
           })),
         }),
@@ -988,21 +976,6 @@ export default function ProgramsAdmin() {
   } finally {
     setAssessmentSaving(false);
   }
-}
-
-      const refreshed = await courseRepository.findById(
-        assessmentCourse.id,
-      );
-
-      if (refreshed) {
-        setAssessmentCourse(refreshed);
-      }
-
-      await load();
-      alert('تم حفظ تقييمات البرنامج بنجاح.');
-    } finally {
-      setAssessmentSaving(false);
-    }
   }
 
   async function openSchedules(course: Course) {

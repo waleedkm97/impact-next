@@ -83,6 +83,8 @@ export default function Students() {
   const [search, setSearch] = useState('');
   const [attendanceTrainee, setAttendanceTrainee] = useState<any>(null);
   const [resultsTrainee, setResultsTrainee] = useState<any>(null);
+  const [certificateTrainee, setCertificateTrainee] = useState<any>(null);
+  const [certificateItems, setCertificateItems] = useState<any[]>([]);
 
   async function load() {
     try {
@@ -289,14 +291,51 @@ export default function Students() {
     setResultsTrainee(refreshed ?? trainee);
   }
 
-  async function remove(id: string) {
-    if (!confirm('حذف حساب المتدرب؟')) {
-      return;
+async function remove(id: string) {
+  if (!confirm('حذف حساب المتدرب؟')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      '/api/trainees/admin',
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id,
+        }),
+      },
+    );
+
+    const result =
+      await response
+        .json()
+        .catch(() => null);
+
+    if (!response.ok || !result?.success) {
+      throw new Error(
+        result?.error ||
+          'تعذر حذف المتدرب.',
+      );
     }
 
-    await traineeRepository.delete(id);
     await load();
+  } catch (error) {
+    console.error(
+      'Failed to delete trainee:',
+      error,
+    );
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'تعذر حذف المتدرب.',
+    );
   }
+}
 
   const visible = items.filter((trainee) => {
     const text = [
@@ -425,49 +464,23 @@ export default function Students() {
                     className="admin-btn admin-btn-light"
                     onClick={async () => {
                       try {
-                        await traineeRepository.refresh();
-
-                        const refreshed = await traineeRepository.findById(
-                          trainee.id,
+                        const response = await fetch(
+                          `/api/certificates?admin=true&traineeId=${encodeURIComponent(
+                            trainee.id,
+                          )}`,
+                          { cache: 'no-store' },
                         );
+                        const data = await response.json().catch(() => null);
 
-                        if (!refreshed) {
-                          alert('لم يتم العثور على حساب المتدرب.');
-                          return;
-                        }
-
-                        const enrollments = refreshed.enrollments ?? [];
-                        let certificateEnrollment: any = null;
-
-                        for (const enrollment of enrollments) {
-                          const certificate =
-                            await traineeRepository.issueCertificateIfEligible(
-                              refreshed.id,
-                              enrollment.id ?? enrollment.courseId,
-                            );
-
-                          if (certificate) {
-                            certificateEnrollment = enrollment;
-                            break;
-                          }
-                        }
-
-                        if (!certificateEnrollment) {
+                        if (!response.ok || !data?.success || !data.items?.length) {
                           alert(
-                            'لا توجد شهادة مستحقة لهذا المتدرب حتى الآن. تأكد من إكمال Pre-Assessment وPost-Assessment وتقييم الدورة، وإكمال التقدم إذا كانت الدورة مسجلة.',
+                            data?.error || 'تعذر إصدار شهادة للمتدرب.',
                           );
                           return;
                         }
 
-                        window.open(
-                          `/certificate?traineeId=${encodeURIComponent(
-                            refreshed.id,
-                          )}&courseId=${encodeURIComponent(
-                            certificateEnrollment.courseId,
-                          )}`,
-                          '_blank',
-                          'noopener,noreferrer',
-                        );
+                        setCertificateTrainee(trainee);
+                        setCertificateItems(data.items);
                       } catch (error) {
                         console.error(
                           'Failed to open trainee certificate:',
@@ -926,6 +939,79 @@ export default function Students() {
               >
                 إغلاق
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {certificateTrainee && (
+        <div className="admin-modal-backdrop">
+          <div className="admin-modal" style={{ maxWidth: 760 }}>
+            <div className="admin-modal-header">
+              <div>
+                <h2>شهادات المتدرب</h2>
+                <p style={{ margin: '6px 0 0' }}>
+                  {certificateTrainee.profile?.firstName}{' '}
+                  {certificateTrainee.profile?.lastName}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="admin-modal-close"
+                onClick={() => {
+                  setCertificateTrainee(null);
+                  setCertificateItems([]);
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="admin-modal-body">
+              <div style={{ display: 'grid', gap: 12 }}>
+                {certificateItems.map((item) => (
+                  <div
+                    key={item.certificate.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 12,
+                      padding: 16,
+                    }}
+                  >
+                    <div>
+                      <strong>
+                        {item.course?.title || item.certificate.courseTitle}
+                      </strong>
+                      <div style={{ marginTop: 6, color: '#6b7280', fontSize: 13 }}>
+                        {item.certificate.certificateNumber} · Enrollment {item.enrollment.id}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-primary"
+                      onClick={() =>
+                        window.open(
+                          `/certificate?traineeId=${encodeURIComponent(
+                            certificateTrainee.id,
+                          )}&admin=true&courseId=${encodeURIComponent(
+                            item.enrollment.courseId,
+                          )}&enrollmentId=${encodeURIComponent(
+                            item.enrollment.id,
+                          )}`,
+                          '_blank',
+                          'noopener,noreferrer',
+                        )
+                      }
+                    >
+                      عرض الشهادة
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

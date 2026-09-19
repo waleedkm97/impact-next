@@ -267,7 +267,7 @@ export async function POST(request: Request) {
             delivery: normalizeDelivery(course.delivery),
             trainingKind: course.trainingKind,
             cities: cleanStringArray(course.cities),
-            price: course.price ?? 0,
+            price: normalizeCoursePrice(course),
             oldPrice: course.oldPrice ?? null,
             discount: course.discount ?? null,
             currency: course.currency ?? 'SAR',

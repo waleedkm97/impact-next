@@ -24,10 +24,7 @@ export default function Register() {
     setRunning(true);
 
     try {
-      if (await traineeRepository.findByEmail(email)) {
-        setMsg('هذا البريد مستخدم بالفعل.');
-        return;
-      }
+      // التحقق من وجود البريد يتم من قاعدة SQL داخل /api/trainees/register
       const sqlResponse = await fetch('/api/trainees/register', {
         method: 'POST',
         headers: {
@@ -75,13 +72,24 @@ export default function Register() {
       });
 
       const user = await traineeRepository.loginUser(email, password);
+document.cookie =
+  `impact_sql_trainee=${encodeURIComponent(
+    sqlData.trainee.id,
+  )}; Max-Age=2592000; Path=/; SameSite=Lax`;
+if (!user) {
+  setMsg('تم إنشاء الحساب، لكن تعذر تسجيل الدخول تلقائيًا.');
+  return;
+}
 
-      if (!user) {
-        setMsg('تم إنشاء الحساب، لكن تعذر تسجيل الدخول تلقائيًا.');
-        return;
-      }
+document.cookie =
+  `impact_trainee=${encodeURIComponent(
+    sqlData.trainee.id,
+  )}; ` +
+  `Max-Age=2592000; ` +
+  `Path=/; ` +
+  `SameSite=Lax`;
 
-      router.push('/account');
+router.push('/account');
     } catch {
       setMsg('تعذر إنشاء الحساب. حاول مرة أخرى.');
     } finally {

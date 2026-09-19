@@ -137,7 +137,10 @@ const sessionUser =
   await traineeRepository.startSession(
     localUser.id,
   );
-
+ document.cookie =
+  `impact_sql_trainee=${encodeURIComponent(
+    traineeData.trainee.id,
+  )}; Max-Age=2592000; Path=/; SameSite=Lax`;
 if (!sessionUser) {
   setMsg(
     'تم التحقق من الحساب، لكن تعذر إنشاء جلسة المتدرب.',
