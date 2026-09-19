@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { courseRepository } from '@/lib/data/repositories/course-repository';
+import { fetchCatalog } from '@/lib/public-catalog';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
+import { useLocale } from '@/hooks/use-locale';
 import type { Course } from '@/types/course';
 
 export default function CourseDetails() {
+  const { isEnglish } = useLocale();
   const id =
     useSearchParams().get('id') || '';
 
@@ -25,12 +27,14 @@ export default function CourseDetails() {
 
     async function load() {
       const [
-        currentCourse,
+        courseResponse,
         user,
       ] = await Promise.all([
-        courseRepository.findById(id),
+        fetchCatalog({ id }).then((data) => data.courses[0] ?? null),
         traineeRepository.getCurrentUser(),
       ]);
+
+      const currentCourse = courseResponse;
 
       if (!active) {
         return;
@@ -110,9 +114,9 @@ export default function CourseDetails() {
     return (
       <main
         className="container mx-auto px-6 py-12"
-        dir="rtl"
+        dir={isEnglish ? 'ltr' : 'rtl'}
       >
-        جاري التحميل...
+        {isEnglish ? 'Loading...' : 'جاري التحميل...'}
       </main>
     );
   }
@@ -121,17 +125,17 @@ export default function CourseDetails() {
     return (
       <main
         className="container mx-auto px-6 py-12"
-        dir="rtl"
+        dir={isEnglish ? 'ltr' : 'rtl'}
       >
         <h1>
-          الدورة غير موجودة
+          {isEnglish ? 'Course not found' : 'الدورة غير موجودة'}
         </h1>
 
         <Link
           href="/recorded-courses"
           className="btn-secondary"
         >
-          العودة للدورات
+          {isEnglish ? 'Back to courses' : 'العودة للدورات'}
         </Link>
       </main>
     );
@@ -140,18 +144,20 @@ export default function CourseDetails() {
   return (
     <main
       className="container mx-auto px-6 py-12"
-      dir="rtl"
+      dir={isEnglish ? 'ltr' : 'rtl'}
     >
       <span className="card-label">
-        دورة مسجلة
+        {isEnglish ? 'Recorded course' : 'دورة مسجلة'}
       </span>
+
+      <div className="course-detail-image" style={{ backgroundImage: `url(${course.image || course.thumbnail || ''})` }} />
 
       <h1>{course.title}</h1>
 
       <p>{course.description}</p>
 
       <section className="course-details-section">
-        <h2>نبذة عن الدورة</h2>
+        <h2>{isEnglish ? 'Course overview' : 'نبذة عن الدورة'}</h2>
 
         <p>
           {course.shortDescription ||
@@ -160,7 +166,7 @@ export default function CourseDetails() {
       </section>
 
       <section className="course-details-section">
-        <h2>الأهداف</h2>
+        <h2>{isEnglish ? 'Objectives' : 'الأهداف'}</h2>
 
         <ul>
           {course.objectives.map(
@@ -174,24 +180,38 @@ export default function CourseDetails() {
       </section>
 
       <section className="course-details-section">
-        <h2>الفئة المستهدفة</h2>
+        <h2>{isEnglish ? 'Topics' : 'المحاور'}</h2>
+
+        <ol>
+          {(course.outline ?? '')
+            .split('\n')
+            .map((topic) => topic.trim())
+            .filter(Boolean)
+            .map((topic) => (
+              <li key={topic}>{topic}</li>
+            ))}
+        </ol>
+      </section>
+
+      <section className="course-details-section">
+        <h2>{isEnglish ? 'Target audience' : 'الفئة المستهدفة'}</h2>
 
         <p>
           {course.audience ||
-            'المهتمون بتطوير مهاراتهم المهنية.'}
+            (isEnglish ? 'Professionals seeking to develop their skills.' : 'المهتمون بتطوير مهاراتهم المهنية.')}
         </p>
       </section>
 
       <section className="course-details-section">
-        <h2>المحتوى</h2>
+        <h2>{isEnglish ? 'Course content' : 'المحتوى'}</h2>
 
         <ol>
           {(course.lessons ?? []).map(
-            (lesson) => (
+            (lesson, index) => (
               <li key={lesson.id}>
-                {lesson.title}{' '}
+                {isEnglish ? `Module ${index + 1}` : lesson.title}{' '}
                 {lesson.type === 'quiz'
-                  ? '— اختبار تفاعلي'
+                  ? isEnglish ? '— Interactive assessment' : '— اختبار تفاعلي'
                   : ''}
               </li>
             ),
@@ -201,13 +221,12 @@ export default function CourseDetails() {
 
       <div className="course-details-purchase">
         <div>
-          <span>السعر</span>
+          <span>{isEnglish ? 'Price' : 'السعر'}</span>
 
           <strong>
             {course.price.toLocaleString(
-              'ar-SA',
-            )}{' '}
-            ر.س
+              isEnglish ? 'en-US' : 'ar-SA',
+            )}{' '}{isEnglish ? 'SAR' : 'ر.س'}
           </strong>
         </div>
 
@@ -218,7 +237,7 @@ export default function CourseDetails() {
             )}`}
             className="btn-primary"
           >
-            ابدأ التعلم
+            {isEnglish ? 'Start learning' : 'ابدأ التعلم'}
           </Link>
         ) : (
           <Link
@@ -227,7 +246,7 @@ export default function CourseDetails() {
             )}`}
             className="btn-primary"
           >
-            شراء الدورة
+            {isEnglish ? 'Buy course' : 'شراء الدورة'}
           </Link>
         )}
       </div>

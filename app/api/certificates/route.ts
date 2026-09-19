@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { issueCertificateForEnrollment } from '@/lib/certificate-service';
+import { hasStaffPermission } from '@/lib/staff-authorization';
+import { canAccessCourse } from '@/lib/staff-scope';
 
 function traineeIdFromRequest(request: Request) {
   return (
@@ -65,6 +67,15 @@ export async function GET(request: Request) {
     const enrollmentId = searchParams.get('enrollmentId')?.trim() || '';
     const groupId = searchParams.get('groupId')?.trim() || '';
     const sessionTraineeId = traineeIdFromRequest(request);
+
+    if (adminOverride && request.headers.get('cookie')?.includes('impact_staff=')) {
+      if (!(await hasStaffPermission(request, 'viewCertificates'))) {
+        return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+      }
+      if (courseId && !(await canAccessCourse(request, courseId))) {
+        return NextResponse.json({ success: false, error: 'الدورة خارج نطاق الإسناد.' }, { status: 403 });
+      }
+    }
 
     if (!adminOverride && requestedTraineeId && requestedTraineeId !== sessionTraineeId) {
       return NextResponse.json(

@@ -777,6 +777,8 @@ const groupEntries =
                 const isOnlineCourse =
                   course?.delivery === 'online' || group?.corporateDelivery === 'أونلاين';
 
+                const groupMeetingLink = group?.meetingLink;
+
                 const locationText = isOnlineCourse
                   ? 'أونلاين مباشر'
                   : group?.corporateLocation || schedule?.location || schedule?.city || 'يحدد لاحقاً';
@@ -918,6 +920,17 @@ const groupEntries =
                           >
                             عرض الشهادة
                           </button>
+                        )}
+
+                        {isOnlineCourse && groupMeetingLink && (
+                          <a
+                            href={groupMeetingLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full rounded-xl border border-[#062b67] px-5 py-3 text-center font-semibold text-[#062b67] transition hover:bg-blue-50"
+                          >
+                            رابط الحضور
+                          </a>
                         )}
                       </div>
 

@@ -7,6 +7,7 @@ import type {
   StaffRole,
   StaffStatus,
   StaffUser,
+  StaffPermission,
 } from '@/types/staff';
 
 import { staffRepository } from '@/lib/data/repositories/staff-repository';
@@ -41,6 +42,9 @@ function getRoleLabel(role: StaffRole) {
 
     case 'trainer':
       return 'مدرب';
+
+    case 'employee':
+      return 'موظف';
 
     default:
       return role;
@@ -81,6 +85,7 @@ type FormState = {
   password: string;
   role: StaffRole;
   status: StaffStatus;
+  permissions?: StaffPermission[];
 };
 
 const emptyForm: FormState = {
@@ -90,7 +95,86 @@ const emptyForm: FormState = {
   password: '',
   role: 'coordinator',
   status: 'active',
+  permissions: [],
 };
+
+const permissionOptions: Array<{ value: StaffPermission; label: string }> = [
+  { value: 'viewTrainees', label: 'مشاهدة المتدربين' },
+  { value: 'createTrainee', label: 'إضافة متدرب' },
+  { value: 'editTrainee', label: 'تعديل متدرب' },
+  { value: 'deleteTrainee', label: 'حذف متدرب' },
+  { value: 'viewTraineeProgress', label: 'مشاهدة تقدم المتدربين' },
+  { value: 'manageAttendance', label: 'إدارة الحضور' },
+  { value: 'viewTrainingMaterials', label: 'مشاهدة المواد التدريبية' },
+  { value: 'viewAssessmentResults', label: 'مشاهدة نتائج التقييمات' },
+  { value: 'viewCertificates', label: 'مشاهدة الشهادات' },
+  { value: 'viewGroups', label: 'مشاهدة الشركات والمجموعات' },
+  { value: 'createGroup', label: 'إضافة مجموعة' },
+  { value: 'editGroup', label: 'تعديل مجموعة' },
+  { value: 'deleteGroup', label: 'حذف مجموعة' },
+  { value: 'viewReports', label: 'مشاهدة التقارير' },
+  { value: 'viewCourses', label: 'مشاهدة الدورات' },
+  { value: 'editCourses', label: 'تعديل الدورات' },
+  { value: 'viewOrders', label: 'مشاهدة الطلبات' },
+  { value: 'editOrders', label: 'تعديل الطلبات' },
+  { value: 'viewAssessments', label: 'مشاهدة التقييمات' },
+  { value: 'editAssessments', label: 'تعديل التقييمات' },
+  { value: 'viewUsers', label: 'مشاهدة المستخدمين' },
+  { value: 'editUsers', label: 'تعديل المستخدمين' },
+  { value: 'viewSettings', label: 'مشاهدة الإعدادات' },
+  { value: 'editSettings', label: 'تعديل الإعدادات' },
+  { value: 'viewContactRequests', label: 'مشاهدة طلبات التواصل' },
+];
+
+const legacyPermissionAliases: Record<string, StaffPermission[]> = {
+  courses: ['viewCourses', 'editCourses'],
+  orders: ['viewOrders', 'editOrders'],
+  trainees: [
+    'viewTrainees',
+    'createTrainee',
+    'editTrainee',
+    'deleteTrainee',
+    'viewTraineeProgress',
+    'manageAttendance',
+    'viewTrainingMaterials',
+    'viewAssessmentResults',
+    'viewCertificates',
+  ],
+  groups: ['viewGroups', 'createGroup', 'editGroup', 'deleteGroup', 'viewReports'],
+  assessments: ['viewAssessments', 'editAssessments'],
+  certificates: ['viewCertificates'],
+  users: ['viewUsers', 'editUsers'],
+  settings: ['viewSettings', 'editSettings'],
+  contactRequests: ['viewContactRequests'],
+};
+
+function hasPermission(
+  permissions: StaffPermission[] | undefined,
+  permission: StaffPermission,
+) {
+  if (permissions?.includes(permission)) return true;
+
+  return Object.entries(legacyPermissionAliases).some(
+    ([legacy, granular]) =>
+      permissions?.includes(legacy as StaffPermission) && granular.includes(permission),
+  );
+}
+
+function normalizePermissions(permissions?: StaffPermission[]) {
+  const normalized = new Set<StaffPermission>();
+
+  for (const permission of permissions ?? []) {
+    const granular = legacyPermissionAliases[permission];
+
+    if (granular) {
+      granular.forEach((value) => normalized.add(value));
+    } else {
+      normalized.add(permission);
+    }
+  }
+
+  return Array.from(normalized);
+}
 
 export default function UsersPage() {
   const router = useRouter();
@@ -253,6 +337,7 @@ export default function UsersPage() {
       password: '',
       role: user.role,
       status: user.status,
+      permissions: normalizePermissions(user.permissions),
     });
 
     setMessage('');
@@ -312,6 +397,7 @@ export default function UsersPage() {
             undefined,
           role: form.role,
           status: form.status,
+          permissions: form.permissions ?? [],
         };
 
         if (form.password) {
@@ -339,6 +425,9 @@ export default function UsersPage() {
           role: form.role,
           status: form.status,
           assignedGroupIds: [],
+          permissions: form.role === 'employee' && form.permissions?.length
+            ? form.permissions
+            : undefined,
         });
 
         setMessage(
@@ -1301,6 +1390,10 @@ export default function UsersPage() {
                       مدرب
                     </option>
 
+                    <option value="employee">
+                      موظف
+                    </option>
+
                     <option value="admin">
                       مدير النظام
                     </option>
@@ -1342,6 +1435,31 @@ export default function UsersPage() {
                   </select>
                 </div>
               </div>
+
+              {form.role !== 'admin' && (
+                <div style={{ marginTop: 16 }}>
+                  <label style={labelStyle}>صلاحيات الموظف</label>
+                  <div className="admin-checkboxes" style={{ marginTop: 8 }}>
+                    {permissionOptions.map((permission) => (
+                      <label className="admin-checkbox" key={permission.value}>
+                        <input
+                          type="checkbox"
+                          checked={hasPermission(form.permissions, permission.value)}
+                          onChange={(event) =>
+                            setForm({
+                              ...form,
+                              permissions: event.target.checked
+                                ? [...(form.permissions ?? []), permission.value]
+                                : (form.permissions ?? []).filter((value) => value !== permission.value),
+                            })
+                          }
+                        />
+                        {permission.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div
                 style={{

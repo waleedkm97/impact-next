@@ -100,10 +100,7 @@ function assessmentStateLabel(
 ) {
   if (state === 'completed') {
     return {
-      label:
-        typeof score === 'number'
-          ? `${score}/100`
-          : 'مكتمل',
+      label: typeof score === 'number' ? `${score}/100` : 'مكتمل',
       className: 'admin-status admin-status-ok',
     };
   }
@@ -133,25 +130,17 @@ export default function GroupsPage() {
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
-
   const [selectedCompany, setSelectedCompany] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState('');
-
   const [memberId, setMemberId] = useState('');
-
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] =
-    useState<string | null>(null);
-
-  const [savingAssessment, setSavingAssessment] =
-    useState<AssessmentKey | null>(null);
-
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingAssessment, setSavingAssessment] = useState<AssessmentKey | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
-
   const [assignmentTrainerId, setAssignmentTrainerId] = useState('');
   const [assignmentCoordinatorId, setAssignmentCoordinatorId] = useState('');
   const [savingAssignment, setSavingAssignment] = useState(false);
-
+  const [materialChanged, setMaterialChanged] = useState(false);
   const [form, setForm] = useState({
     name: '',
     courseId: '',
@@ -162,23 +151,18 @@ export default function GroupsPage() {
     corporateDate: '',
     corporateDelivery: 'حضوري' as 'حضوري' | 'أونلاين',
     corporateLocation: '',
+    meetingLink: '',
+    expectedTrainees: '',
     materialUrl: '',
     notes: '',
   });
-
   async function load() {
-  await traineeRepository.refresh();
-
   const [
-    localGroupList,
     courseList,
-    traineeList,
     scheduleList,
     staffList,
   ] = await Promise.all([
-    groupRepository.findAll(),
     courseRepository.findAll(),
-    traineeRepository.findAll(),
     scheduleRepository.findAll({
       sort: 'startDate',
       order: 'asc',
@@ -186,7 +170,40 @@ export default function GroupsPage() {
     staffRepository.findAll(),
   ]);
 
-  let groupList = localGroupList;
+  const traineeResponse = await fetch(
+    '/api/trainees/admin?activeOnly=true',
+    { cache: 'no-store' },
+  );
+
+  if (!traineeResponse.ok && traineeResponse.status !== 403) {
+    throw new Error('تعذر تحميل المتدربين النشطين.');
+  }
+
+  const traineeData = traineeResponse.ok
+    ? await traineeResponse.json()
+    : { trainees: [] };
+  const traineeList: Trainee[] = (traineeData.trainees ?? []).map(
+    (trainee: any) => ({
+      ...trainee,
+      profile: {
+        firstName: trainee.firstName ?? '',
+        lastName: trainee.lastName ?? '',
+        firstNameEnglish: trainee.firstNameEnglish ?? '',
+        lastNameEnglish: trainee.lastNameEnglish ?? '',
+      },
+      contact: {
+        email: trainee.email ?? '',
+        phone: trainee.phone ?? '',
+      },
+      enrollments: Array.isArray(trainee.enrollments)
+        ? trainee.enrollments
+        : [],
+      progress: [],
+      certificates: [],
+    }),
+  );
+
+  let groupList: TrainingGroup[] = [];
 
   try {
     const groupsResponse = await fetch('/api/groups');
@@ -206,18 +223,7 @@ export default function GroupsPage() {
           }),
         );
 
-        const sqlGroupIds = new Set(
-          mappedSqlGroups.map((group) => group.id),
-        );
-
-        const localOnlyGroups = localGroupList.filter(
-          (group) => !sqlGroupIds.has(group.id),
-        );
-
-        groupList = [
-          ...mappedSqlGroups,
-          ...localOnlyGroups,
-        ];
+        groupList = mappedSqlGroups;
       }
     }
   } catch (error) {
@@ -366,6 +372,7 @@ export default function GroupsPage() {
    */
 
   function resetForm() {
+    setMaterialChanged(false);
     setForm({
       name: '',
       courseId: '',
@@ -376,6 +383,8 @@ export default function GroupsPage() {
       corporateDate: '',
       corporateDelivery: 'حضوري',
       corporateLocation: '',
+      meetingLink: '',
+      expectedTrainees: '',
       materialUrl: '',
       notes: '',
     });
@@ -383,6 +392,7 @@ export default function GroupsPage() {
 
   function startCreate() {
     setEditingId(null);
+    setMaterialChanged(false);
 
     setForm({
       name: '',
@@ -394,6 +404,8 @@ export default function GroupsPage() {
       corporateDate: '',
       corporateDelivery: 'حضوري',
       corporateLocation: '',
+      meetingLink: '',
+      expectedTrainees: '',
       materialUrl: '',
       notes: '',
     });
@@ -405,6 +417,7 @@ export default function GroupsPage() {
     if (!selectedGroup) return;
 
     setEditingId(selectedGroup.id);
+    setMaterialChanged(false);
 
     setForm({
       name: selectedGroup.name || '',
@@ -423,6 +436,10 @@ export default function GroupsPage() {
         selectedGroup.corporateDelivery || 'حضوري',
       corporateLocation:
         selectedGroup.corporateLocation || '',
+      meetingLink: selectedGroup.meetingLink || '',
+      expectedTrainees: selectedGroup.expectedTrainees
+        ? String(selectedGroup.expectedTrainees)
+        : '',
       materialUrl:
         selectedGroup.materialUrl || '',
       notes: selectedGroup.notes || '',
@@ -443,6 +460,7 @@ export default function GroupsPage() {
         ...current,
         materialUrl: String(reader.result || ''),
       }));
+      setMaterialChanged(true);
     };
     reader.readAsDataURL(file);
   }
@@ -464,7 +482,8 @@ export default function GroupsPage() {
     const companyName =
       form.companyName.trim();
 
-   const group = await groupRepository.create({
+  const group = {
+  id: `group-${crypto.randomUUID()}`,
   name:
     form.name.trim() ||
     companyName ||
@@ -489,6 +508,13 @@ export default function GroupsPage() {
   corporateLocation:
     form.corporateLocation.trim() || undefined,
 
+  meetingLink:
+    form.meetingLink.trim() || undefined,
+
+  expectedTrainees: form.expectedTrainees
+    ? Number(form.expectedTrainees)
+    : undefined,
+
   materialUrl:
     form.materialUrl || undefined,
 
@@ -508,6 +534,9 @@ export default function GroupsPage() {
     undefined,
 
   traineeIds: [],
+  trainerId: undefined,
+  coordinatorId: undefined,
+  maxParticipants: undefined,
 
   notes:
     form.notes.trim() || undefined,
@@ -523,7 +552,7 @@ export default function GroupsPage() {
       enabled: false,
     },
   },
-});
+};
 
 const sqlResponse = await fetch('/api/groups', {
   method: 'POST',
@@ -543,6 +572,8 @@ const sqlResponse = await fetch('/api/groups', {
       group.corporateDelivery,
     corporateLocation:
       group.corporateLocation,
+    meetingLink: group.meetingLink,
+    expectedTrainees: group.expectedTrainees,
     materialUrl: group.materialUrl,
     companyName: group.companyName,
     responsibleName:
@@ -603,53 +634,6 @@ if (!sqlResponse.ok) {
       return;
     }
 
-        await groupRepository.update(
-      editingId,
-      {
-        name:
-          form.name.trim() ||
-          form.companyName.trim() ||
-          `مجموعة ${course.title}`,
-
-        courseId: course.id,
-
-        courseTitle: course.title,
-
-        scheduleId: undefined,
-
-        corporateDate:
-          form.corporateDate || undefined,
-
-        corporateDelivery:
-          form.corporateDelivery,
-
-        corporateLocation:
-          form.corporateLocation.trim() || undefined,
-
-        materialUrl:
-          form.materialUrl || undefined,
-
-        companyName:
-          form.companyName.trim() ||
-          undefined,
-
-        responsibleName:
-          form.responsibleName.trim() ||
-          undefined,
-
-        responsibleEmail:
-          form.responsibleEmail.trim() ||
-          undefined,
-
-        responsiblePhone:
-          form.responsiblePhone.trim() ||
-          undefined,
-
-        notes:
-          form.notes.trim() || undefined,
-      },
-    );
-
     const sqlResponse = await fetch(
       `/api/groups/${encodeURIComponent(editingId)}`,
       {
@@ -677,8 +661,16 @@ if (!sqlResponse.ok) {
             form.corporateLocation.trim() ||
             null,
 
-          materialUrl:
-            form.materialUrl || null,
+          meetingLink:
+            form.meetingLink.trim() || null,
+
+          expectedTrainees: form.expectedTrainees
+            ? Number(form.expectedTrainees)
+            : null,
+
+          ...(materialChanged
+            ? { materialUrl: form.materialUrl || null }
+            : {}),
 
           companyName:
             form.companyName.trim() || null,
@@ -844,10 +836,6 @@ if (!sqlResponse.ok) {
     }
 
     try {
-      await groupRepository.addTrainee(
-        selectedGroupId,
-        memberId,
-      );
       const response = await fetch(
         `/api/groups/${selectedGroupId}/trainees`,
         {
@@ -867,6 +855,7 @@ if (!sqlResponse.ok) {
           result?.error || 'تعذر تسجيل المتدرب في قاعدة البيانات.',
         );
       }
+
       setMemberId('');
 
       await load();
@@ -883,11 +872,6 @@ if (!sqlResponse.ok) {
     traineeId: string,
   ) {
     if (!selectedGroupId) return;
-
-   await groupRepository.removeTrainee(
-  selectedGroupId,
-  traineeId,
-);
 
 const sqlResponse = await fetch(
   `/api/groups/${encodeURIComponent(selectedGroupId)}/trainees`,
@@ -1020,21 +1004,36 @@ await load();
       return;
     }
 
-    await traineeRepository.ensureAttendanceDays(
-      trainee.id,
-      enrollment.id ??
-        enrollment.courseId,
-    );
+    const response = await fetch('/api/course-learning', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enrollmentId: enrollment.id,
+        dayIndex,
+        status,
+      }),
+    });
 
-    await traineeRepository.updateAttendanceDay(
-      trainee.id,
-      enrollment.id ??
-        enrollment.courseId,
-      dayIndex,
-      status,
-    );
+    const result = await response.json().catch(() => null);
 
-    await load();
+    if (!response.ok) {
+      throw new Error(result?.error || 'تعذر حفظ الحضور.');
+    }
+
+    if (result?.enrollment) {
+      setTrainees((current) => current.map((item) =>
+        item.id === trainee.id
+          ? {
+              ...item,
+              enrollments: item.enrollments.map((itemEnrollment) =>
+                itemEnrollment.id === enrollment.id
+                  ? { ...itemEnrollment, ...result.enrollment }
+                  : itemEnrollment,
+              ),
+            }
+          : item,
+      ));
+    }
   }
 
   /*
@@ -1053,21 +1052,6 @@ await load();
     if (!selectedGroup) return;
 
     await traineeRepository.refresh();
-    const eligibleCount = members.filter((trainee) =>
-      trainee.enrollments.some(
-        (enrollment) =>
-          enrollment.courseId === selectedGroup.courseId &&
-          enrollment.groupId === selectedGroup.id &&
-          enrollment.preAssessment === 'completed' &&
-          enrollment.postAssessment === 'completed' &&
-          enrollment.courseEvaluation === 'completed',
-      ),
-    ).length;
-
-    if (eligibleCount === 0) {
-      alert('لا توجد شهادات مستحقة حاليًا لمتدربي هذه المجموعة.');
-      return;
-    }
 
     window.open(
       `/certificate?groupId=${encodeURIComponent(selectedGroup.id)}`,
@@ -1557,6 +1541,23 @@ await load();
                       {members.length}{' '}
                       متدرب
                     </span>
+
+                    {selectedGroup.expectedTrainees ? (
+                      <span className="admin-tag">
+                        المتوقع: {selectedGroup.expectedTrainees} متدرب
+                      </span>
+                    ) : null}
+
+                    {selectedGroup.meetingLink ? (
+                      <a
+                        className="admin-tag"
+                        href={selectedGroup.meetingLink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        فتح رابط التدريب
+                      </a>
+                    ) : null}
 
                     <span className="admin-tag">
                       المسؤول:{' '}
@@ -3023,6 +3024,7 @@ await load();
                   <input
                     className="admin-input"
                     required
+                    disabled={form.corporateDelivery === 'أونلاين'}
                     placeholder="مثال: الرياض أو مقر الشركة"
                     value={form.corporateLocation}
                     onChange={(event) =>
@@ -3030,6 +3032,30 @@ await load();
                         ...form,
                         corporateLocation: event.target.value,
                       })
+                    }
+                  />
+                </div>
+                <div className="admin-field">
+                  <label>رابط التدريب / رابط الاجتماع (اختياري)</label>
+                  <input
+                    className="admin-input"
+                    type="url"
+                    placeholder="https://..."
+                    value={form.meetingLink}
+                    onChange={(event) =>
+                      setForm({ ...form, meetingLink: event.target.value })
+                    }
+                  />
+                </div>
+                <div className="admin-field">
+                  <label>عدد المتدربين المتوقع (اختياري)</label>
+                  <input
+                    className="admin-input"
+                    type="number"
+                    min={0}
+                    value={form.expectedTrainees}
+                    onChange={(event) =>
+                      setForm({ ...form, expectedTrainees: event.target.value })
                     }
                   />
                 </div>
@@ -3044,11 +3070,11 @@ await load();
                       if (file) readGroupMaterialFile(file);
                     }}
                   />
-                  {form.materialUrl ? (
+                  {form.materialUrl || (editingId && selectedGroup?.materialAvailable) ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                       <span style={{ color: '#067647', fontWeight: 700, fontSize: 12 }}>تم تحديد مادة خاصة لهذه المجموعة.</span>
-                      <a href={form.materialUrl} target="_blank" rel="noreferrer" className="admin-btn admin-btn-light" style={{ textDecoration: 'none' }}>معاينة</a>
-                      <button type="button" className="admin-btn admin-btn-light" onClick={() => setForm({ ...form, materialUrl: '' })}>إزالة</button>
+                      <a href={editingId ? `/api/groups/${encodeURIComponent(editingId)}/material` : form.materialUrl} target="_blank" rel="noreferrer" className="admin-btn admin-btn-light" style={{ textDecoration: 'none' }}>معاينة</a>
+                      <button type="button" className="admin-btn admin-btn-light" onClick={() => { setForm({ ...form, materialUrl: '' }); setMaterialChanged(true); }}>إزالة</button>
                     </div>
                   ) : (
                     <small style={{ color: '#7a8799', marginTop: 5 }}>اتركها فارغة لاستخدام المادة العامة للبرنامج.</small>

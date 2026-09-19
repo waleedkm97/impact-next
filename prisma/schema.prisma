@@ -15,6 +15,7 @@ model StaffUser {
   passwordHash           String
   role                   StaffRole
   status                 StaffStatus              @default(active)
+  permissions             Json?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
   lastLoginAt            DateTime?
@@ -73,6 +74,7 @@ model PasswordResetToken {
 model Category {
   id          String   @id
   name        String
+  englishName String?
   description String?
   image       String?
   published   Boolean  @default(true)
@@ -103,8 +105,9 @@ model Course {
   outline                 String?
   audience                String?
   methodology             String?
+  contentEn               Json?
   materialUrl             String?
-  meetingLink             String?
+  meetingLink            String?
   image                   String?
   thumbnail               String?
   certificateSettings     Json?
@@ -295,6 +298,8 @@ model TrainingGroup {
   corporateDelivery  String?
   corporateLocation  String?
   materialUrl        String?
+  meetingLink        String?
+  expectedTrainees   Int?
   companyName        String?
   responsibleName    String?
   responsibleEmail   String?
@@ -467,6 +472,7 @@ model Order {
   completedAt        DateTime?
   cancelledAt        DateTime?
   notes              String?
+  expectedTrainees   Int?
   metadata           Json?
   scheduleId         String?
   bookingDate        DateTime?
@@ -635,6 +641,7 @@ enum StaffRole {
   admin
   coordinator
   trainer
+  employee
 }
 
 enum StaffStatus {

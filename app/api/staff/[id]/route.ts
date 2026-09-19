@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { hasStaffPermission, staffIdFromRequest } from '@/lib/staff-authorization';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -10,6 +11,12 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params;
+    if (
+      staffIdFromRequest(_request) !== id &&
+      !(await hasStaffPermission(_request, 'viewUsers'))
+    ) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
 
     const user = await prisma.staffUser.findUnique({
       where: { id },
@@ -63,6 +70,9 @@ export async function PATCH(
   context: RouteContext,
 ) {
   try {
+    if (!(await hasStaffPermission(request, 'editUsers'))) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const { id } = await context.params;
     const body = await request.json();
 
@@ -85,8 +95,9 @@ export async function PATCH(
       email?: string;
       phone?: string | null;
       passwordHash?: string;
-      role?: 'admin' | 'coordinator' | 'trainer';
+      role?: 'admin' | 'coordinator' | 'trainer' | 'employee';
       status?: 'active' | 'inactive' | 'suspended';
+      permissions?: string[];
     } = {};
 
     if (typeof body.name === 'string') {
@@ -108,9 +119,16 @@ export async function PATCH(
     if (
       body.role === 'admin' ||
       body.role === 'coordinator' ||
-      body.role === 'trainer'
+      body.role === 'trainer' ||
+      body.role === 'employee'
     ) {
       data.role = body.role;
+    }
+
+    if (Array.isArray(body.permissions)) {
+      data.permissions = body.permissions.filter(
+        (permission: unknown): permission is string => typeof permission === 'string',
+      );
     }
 
     if (
@@ -201,6 +219,9 @@ export async function DELETE(
   context: RouteContext,
 ) {
   try {
+    if (!(await hasStaffPermission(_request, 'editUsers'))) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const { id } = await context.params;
 
     const user = await prisma.staffUser.findUnique({

@@ -24,7 +24,8 @@ function normalizeStaff(user: StaffUser): StaffUser {
     role:
       user.role === 'admin' ||
       user.role === 'coordinator' ||
-      user.role === 'trainer'
+      user.role === 'trainer' ||
+      user.role === 'employee'
         ? user.role
         : 'trainer',
 
@@ -37,6 +38,10 @@ function normalizeStaff(user: StaffUser): StaffUser {
     assignedGroupIds: Array.isArray(user.assignedGroupIds)
       ? [...user.assignedGroupIds]
       : [],
+
+    permissions: Array.isArray(user.permissions)
+      ? [...user.permissions]
+      : undefined,
 
     createdAt: normalizeDate(user.createdAt),
 
@@ -235,6 +240,7 @@ export class StaffRepository {
     role: StaffRole;
     status?: StaffStatus;
     assignedGroupIds?: string[];
+    permissions?: StaffUser['permissions'];
   }) {
     if (!input.name.trim()) {
       throw new Error('اسم المستخدم مطلوب.');
@@ -264,6 +270,7 @@ export class StaffRepository {
         password: input.password,
         role: input.role,
         status: input.status ?? 'active',
+        permissions: input.permissions ?? [],
       }),
     });
 

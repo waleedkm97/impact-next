@@ -8,12 +8,24 @@ function isTraineeEligible(enrollment: {
   preAssessment?: string | null;
   postAssessment?: string | null;
   courseEvaluation?: string | null;
+  preAssessmentCompletedAt?: Date | string | null;
+  postAssessmentCompletedAt?: Date | string | null;
+  courseEvaluationCompletedAt?: Date | string | null;
   course?: { type?: string | null } | null;
 }) {
+  const preAssessmentCompleted =
+    enrollment.preAssessment === COMPLETED ||
+    Boolean(enrollment.preAssessmentCompletedAt);
+  const postAssessmentCompleted =
+    enrollment.postAssessment === COMPLETED ||
+    Boolean(enrollment.postAssessmentCompletedAt);
+  const courseEvaluationCompleted =
+    enrollment.courseEvaluation === COMPLETED ||
+    Boolean(enrollment.courseEvaluationCompletedAt);
   const assessmentsCompleted =
-    enrollment.preAssessment === COMPLETED &&
-    enrollment.postAssessment === COMPLETED &&
-    enrollment.courseEvaluation === COMPLETED;
+    preAssessmentCompleted &&
+    postAssessmentCompleted &&
+    courseEvaluationCompleted;
 
   const recordedProgressCompleted =
     enrollment.course?.type !== 'recorded' || enrollment.progress >= 100;
@@ -58,19 +70,18 @@ export async function issueCertificateForEnrollment(
     return { certificate: null, enrollment: null, eligible: false };
   }
 
+  const eligible = adminOverride || isTraineeEligible(enrollment);
+
+  if (!eligible) {
+    return { certificate: null, enrollment, eligible: false };
+  }
+
   if (enrollment.certificate) {
     return {
       certificate: enrollment.certificate,
       enrollment,
       eligible: true,
     };
-  }
-
-  const eligible =
-    adminOverride || isTraineeEligible(enrollment);
-
-  if (!eligible) {
-    return { certificate: null, enrollment, eligible: false };
   }
 
   const certificate = await prisma.certificate.create({

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { hasStaffPermission } from '@/lib/staff-authorization';
 
 function normalizePaymentMethod(value: unknown) {
   if (
@@ -72,8 +73,11 @@ function serializeOrder(order: any) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'viewOrders'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const orders = await prisma.order.findMany({
       include: {
         items: true,
@@ -125,19 +129,10 @@ export async function POST(request: Request) {
       scheduleId,
       bookingDate,
       metadata,
+      expectedTrainees,
       groupId,
       companyId,
     } = body;
-
-    if (!traineeId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'traineeId مطلوب.',
-        },
-        { status: 400 },
-      );
-    }
 
     if (!customer?.name || !customer?.email) {
       return NextResponse.json(
@@ -160,23 +155,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const trainee = await prisma.trainee.findUnique({
-      where: {
-        id: traineeId,
-      },
-      select: {
-        id: true,
-      },
-    });
+    if (!traineeId && !(await hasStaffPermission(request, 'editOrders'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
 
-    if (!trainee) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'المتدرب غير موجود في قاعدة البيانات.',
+    if (traineeId) {
+      const trainee = await prisma.trainee.findUnique({
+        where: {
+          id: traineeId,
         },
-        { status: 404 },
-      );
+        select: {
+          id: true,
+        },
+      });
+
+      if (!trainee) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'المتدرب غير موجود في قاعدة البيانات.',
+          },
+          { status: 404 },
+        );
+      }
     }
 let validScheduleId: string | null = null;
 
@@ -251,6 +252,11 @@ if (scheduleId) {
         status: status || 'pending',
 
         notes: notes || null,
+
+        expectedTrainees:
+          expectedTrainees === null || expectedTrainees === undefined || expectedTrainees === ''
+            ? null
+            : Number(expectedTrainees),
 
         scheduleId: validScheduleId,
 

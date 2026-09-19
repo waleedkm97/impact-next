@@ -1,13 +1,25 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { hasStaffPermission } from '@/lib/staff-authorization';
+import { canAccessGroup } from '@/lib/staff-scope';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ groupId: string }> },
 ) {
   try {
-    const { groupId } = await params;
     const body = await request.json();
+    const requiredPermission = body.type === 'post' || body.type === 'evaluation'
+      ? 'editAssessments'
+      : 'editGroup';
+
+    if (!(await hasStaffPermission(request, requiredPermission))) {
+      return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 });
+    }
+    const { groupId } = await params;
+    if (!(await canAccessGroup(request, groupId))) {
+      return NextResponse.json({ error: 'المجموعة خارج نطاق الإسناد.' }, { status: 403 });
+    }
     const type = body.type === 'post' || body.type === 'evaluation' ? body.type : null;
 
     if (!type || typeof body.enabled !== 'boolean') {
@@ -50,7 +62,13 @@ export async function PUT(
   },
 ) {
   try {
+    if (!(await hasStaffPermission(request, 'editGroup'))) {
+      return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 });
+    }
     const { groupId } = await params;
+    if (!(await canAccessGroup(request, groupId))) {
+      return NextResponse.json({ error: 'المجموعة خارج نطاق الإسناد.' }, { status: 403 });
+    }
     const body = await request.json();
 
     const existing =
@@ -86,12 +104,23 @@ export async function PUT(
             body.corporateDelivery ?? null,
           corporateLocation:
             body.corporateLocation ?? null,
-          materialUrl:
-            body.materialUrl ?? null,
+          ...(body.materialUrl !== undefined
+            ? { materialUrl: body.materialUrl || null }
+            : {}),
+          meetingLink:
+            body.meetingLink ?? null,
+          expectedTrainees:
+            body.expectedTrainees === null || body.expectedTrainees === undefined || body.expectedTrainees === ''
+              ? null
+              : Number(body.expectedTrainees),
             trainerId:
-  body.trainerId ?? null,
-coordinatorId:
-  body.coordinatorId ?? null,
+              body.trainerId !== undefined
+                ? body.trainerId
+                : existing.trainerId,
+            coordinatorId:
+              body.coordinatorId !== undefined
+                ? body.coordinatorId
+                : existing.coordinatorId,
           companyName:
             body.companyName ?? null,
           responsibleName:

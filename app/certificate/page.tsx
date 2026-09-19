@@ -63,8 +63,10 @@ function isOnlineDelivery(item: CertificateView) {
 
 function getHours(item: CertificateView) {
   if (item.course?.type === 'recorded') {
-    return item.course.hours !== undefined && item.course.hours !== null
-      ? String(item.course.hours)
+    const hours = Number(item.course.hours);
+
+    return Number.isFinite(hours) && hours > 0
+      ? String(hours)
       : '—';
   }
 
@@ -79,9 +81,11 @@ function getDuration(item: CertificateView, language: 'ar' | 'en') {
   ) {
     const days = Number(item.course.days);
 
-    return language === 'en'
-      ? `${days} ${days === 1 ? 'day' : 'days'}`
-      : `${days} ${days === 1 ? 'يوم' : 'أيام'}`;
+    if (Number.isFinite(days) && days > 0) {
+      return language === 'en'
+        ? `${days} ${days === 1 ? 'day' : 'days'}`
+        : `${days} ${days === 1 ? 'يوم' : 'أيام'}`;
+    }
   }
 
   if (language === 'en') {

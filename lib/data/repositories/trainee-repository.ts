@@ -673,9 +673,12 @@ const requiresProgress =
   course ? course.type === 'recorded' : enrollment.progress >= 100;
 
 const allRequirementsCompleted =
-  enrollment.preAssessment === 'completed' &&
-  enrollment.postAssessment === 'completed' &&
-  enrollment.courseEvaluation === 'completed' &&
+  (enrollment.preAssessment === 'completed' ||
+    Boolean(enrollment.preAssessmentCompletedAt)) &&
+  (enrollment.postAssessment === 'completed' ||
+    Boolean(enrollment.postAssessmentCompletedAt)) &&
+  (enrollment.courseEvaluation === 'completed' ||
+    Boolean(enrollment.courseEvaluationCompletedAt)) &&
   (!requiresProgress || enrollment.progress >= 100);
 
     if (!allRequirementsCompleted) {

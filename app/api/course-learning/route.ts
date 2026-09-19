@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { resolveAssessmentAccess } from '@/lib/assessment-access';
 import { issueCertificateForEnrollment } from '@/lib/certificate-service';
+import { hasStaffPermission } from '@/lib/staff-authorization';
+import { canAccessCourse } from '@/lib/staff-scope';
 
 function serializeDecimal(value: unknown) {
   if (value === null || value === undefined) {
@@ -315,6 +317,12 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json();
 
+    if (request.headers.get('cookie')?.includes('impact_staff=')) {
+      if (!(await hasStaffPermission(request, 'manageAttendance'))) {
+        return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+      }
+    }
+
     if (
       !body.enrollmentId ||
       typeof body.dayIndex !== 'number' ||
@@ -365,6 +373,12 @@ export async function PATCH(request: Request) {
         },
         { status: 404 },
       );
+    }
+
+    if (request.headers.get('cookie')?.includes('impact_staff=')) {
+      if (!(await canAccessCourse(request, enrollment.courseId))) {
+        return NextResponse.json({ success: false, error: 'الدورة خارج نطاق الإسناد.' }, { status: 403 });
+      }
     }
 
     let attendanceDays = enrollment.attendanceDays;

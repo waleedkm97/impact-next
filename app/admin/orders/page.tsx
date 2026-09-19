@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { orderRepository } from '@/lib/data/repositories/order-repository';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
-import { groupRepository } from '@/lib/data/repositories/group-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
 import type { Schedule } from '@/types/schedule';
 import type { Course } from '@/types/course';
@@ -22,6 +20,7 @@ interface OrderForm {
   corporateDate: string;
 corporateDelivery: 'حضوري' | 'أونلاين';
 corporateLocation: string;
+  expectedTrainees: string;
   price: string;
   notes: string;
 }
@@ -40,6 +39,7 @@ const initialForm: OrderForm = {
   corporateDate: '',
 corporateDelivery: 'حضوري',
 corporateLocation: '',
+  expectedTrainees: '',
   price: '',
   notes: '',
 };
@@ -108,7 +108,20 @@ const [form, setForm] = useState<OrderForm>(initialForm);
   }
 
   async function cancel(id: string) {
-    await orderRepository.cancelOrder(id);
+    const response = await fetch(`/api/orders/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'cancelled' }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      alert(data?.error || 'تعذر إلغاء الطلب.');
+      return;
+    }
+
     await load();
   }
 
@@ -117,7 +130,16 @@ const [form, setForm] = useState<OrderForm>(initialForm);
       return;
     }
 
-    await orderRepository.delete(id);
+    const response = await fetch(`/api/orders/${id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      alert(data?.error || 'تعذر حذف الطلب.');
+      return;
+    }
+
     await load();
   }
 function startEdit(order: any) {
@@ -140,6 +162,7 @@ function startEdit(order: any) {
     corporateDate: order.metadata?.corporateDate || '',
     corporateDelivery: order.metadata?.corporateDelivery || 'حضوري',
     corporateLocation: order.metadata?.corporateLocation || '',
+    expectedTrainees: order.expectedTrainees ? String(order.expectedTrainees) : '',
     price: String(order.total || item?.unitPrice || ''),
     notes: order.notes || '',
   });
@@ -170,30 +193,25 @@ async function updateOrder(event: React.FormEvent) {
 
   const amount = Number(form.price || course.price || 0);
 
-  await orderRepository.update(editingId, {
-    customer: {
-      ...order.customer,
-      name: form.type === 'corporate' ? form.responsibleName : form.name,
-      email: form.type === 'corporate' ? form.responsibleEmail : form.email,
-      phone: form.type === 'corporate' ? form.responsiblePhone : form.phone,
-      company: form.company.trim() || undefined,
-      responsibleName:
-        form.type === 'corporate'
-          ? form.responsibleName.trim() || undefined
-          : undefined,
-      responsibleEmail:
-        form.type === 'corporate'
-          ? form.responsibleEmail.trim() || undefined
-          : undefined,
-      responsiblePhone:
-        form.type === 'corporate'
-          ? form.responsiblePhone.trim() || undefined
-          : undefined,
-    },
-
-    items: [
-      {
-        ...order.items?.[0],
+  const response = await fetch(`/api/orders/${editingId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'details',
+      type: form.type,
+      customer: {
+        name: form.type === 'corporate' ? form.responsibleName : form.name,
+        email: form.type === 'corporate' ? form.responsibleEmail : form.email,
+        phone: form.type === 'corporate' ? form.responsiblePhone : form.phone,
+        company: form.company.trim() || null,
+        responsibleName:
+          form.type === 'corporate' ? form.responsibleName.trim() || null : null,
+        responsibleEmail:
+          form.type === 'corporate' ? form.responsibleEmail.trim() || null : null,
+        responsiblePhone:
+          form.type === 'corporate' ? form.responsiblePhone.trim() || null : null,
+      },
+      items: [{
         id: order.items?.[0]?.id || `item-${Date.now()}`,
         type: course.type === 'training' ? 'training-program' : 'course',
         itemId: course.id,
@@ -201,47 +219,46 @@ async function updateOrder(event: React.FormEvent) {
         quantity: 1,
         unitPrice: amount,
         totalPrice: amount,
+      }],
+      subtotal: amount,
+      total: amount,
+      scheduleId: form.type === 'public' ? form.scheduleId || null : null,
+      notes: form.notes.trim() || null,
+      metadata: {
+        corporateDate: form.type === 'corporate' ? form.corporateDate || null : null,
+        corporateDelivery: form.type === 'corporate' ? form.corporateDelivery : null,
+        corporateLocation: form.type === 'corporate' ? form.corporateLocation.trim() || null : null,
       },
-    ],
-
-    subtotal: amount,
-    total: amount,
-    scheduleId:
-      form.type === 'public'
-        ? form.scheduleId || undefined
-        : undefined,
-
-    payment: {
-      ...order.payment,
-      amount,
-    },
-
-    notes: form.notes.trim() || undefined,
-
-    metadata: {
-      ...order.metadata,
-      corporateDate:
-        form.type === 'corporate'
-          ? form.corporateDate || undefined
-          : undefined,
-      corporateDelivery:
-        form.type === 'corporate'
-          ? form.corporateDelivery
-          : undefined,
-      corporateLocation:
-        form.type === 'corporate'
-          ? form.corporateLocation.trim() || undefined
-          : undefined,
-    },
+      expectedTrainees: form.expectedTrainees
+        ? Number(form.expectedTrainees)
+        : null,
+    }),
   });
 
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    alert(data?.error || 'تعذر تحديث الطلب.');
+    return;
+  }
+
   if (form.type === 'corporate' && order.customer?.groupId) {
-    const existingGroup = await groupRepository.findById(
-      order.customer.groupId,
-    );
+    const groupsResponse = await fetch('/api/groups', {
+      cache: 'no-store',
+    });
+    const groups = groupsResponse.ok
+      ? await groupsResponse.json()
+      : [];
+    const existingGroup = Array.isArray(groups)
+      ? groups.find((group: any) => group.id === order.customer.groupId)
+      : null;
 
     if (existingGroup) {
-      await groupRepository.update(order.customer.groupId, {
+      await fetch(
+        `/api/groups/${encodeURIComponent(order.customer.groupId)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
         name: form.company.trim() || `مجموعة ${course.title}`,
         courseId: course.id,
         courseTitle: course.title,
@@ -253,7 +270,9 @@ async function updateOrder(event: React.FormEvent) {
         responsibleEmail: form.responsibleEmail.trim() || undefined,
         responsiblePhone: form.responsiblePhone.trim() || undefined,
         notes: form.notes.trim() || undefined,
-      });
+          }),
+        },
+      );
     }
   }
 
@@ -285,70 +304,94 @@ async function updateOrder(event: React.FormEvent) {
     let groupId: string | undefined;
 
     if (form.type === 'corporate') {
-      const group = await groupRepository.create({
-        name: form.company.trim() || `مجموعة ${course.title}`,
-        type: 'corporate',
-        status: 'active',
-        courseId: course.id,
-        courseTitle: course.title,
-        scheduleId: undefined,
-corporateDate: form.corporateDate || undefined,
-corporateDelivery: form.corporateDelivery,
-corporateLocation: form.corporateLocation.trim() || undefined,
-companyName: form.company.trim() || undefined,
-        responsibleName: form.responsibleName.trim() || undefined,
-        responsibleEmail: form.responsibleEmail.trim() || undefined,
-        responsiblePhone: form.responsiblePhone.trim() || undefined,
-        traineeIds: [],
-        notes: form.notes.trim() || undefined,
+      groupId = `group-${crypto.randomUUID()}`;
+      const groupResponse = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: groupId,
+          name: form.company.trim() || `مجموعة ${course.title}`,
+          type: 'corporate',
+          status: 'active',
+          courseId: course.id,
+          courseTitle: course.title,
+          corporateDate: form.corporateDate || null,
+          corporateDelivery: form.corporateDelivery,
+          corporateLocation: form.corporateLocation.trim() || null,
+          expectedTrainees: form.expectedTrainees
+            ? Number(form.expectedTrainees)
+            : null,
+          companyName: form.company.trim() || null,
+          responsibleName: form.responsibleName.trim() || null,
+          responsibleEmail: form.responsibleEmail.trim() || null,
+          responsiblePhone: form.responsiblePhone.trim() || null,
+          notes: form.notes.trim() || null,
+        }),
       });
 
-      groupId = group.id;
+      if (!groupResponse.ok) {
+        const data = await groupResponse.json().catch(() => null);
+        throw new Error(data?.error || 'تعذر حفظ المجموعة في قاعدة البيانات.');
+      }
     }
 
-    await orderRepository.create({
-      type: form.type,
-      customer: {
-        traineeId: '',
-        name: form.type === 'corporate' ? form.responsibleName : form.name,
-        email: form.type === 'corporate' ? form.responsibleEmail : form.email,
-        phone: form.type === 'corporate' ? form.responsiblePhone : form.phone,
-        company: form.company || undefined,
-        groupId,
-        responsibleName: form.type === 'corporate' ? form.responsibleName : undefined,
-        responsibleEmail: form.type === 'corporate' ? form.responsibleEmail : undefined,
-        responsiblePhone: form.type === 'corporate' ? form.responsiblePhone : undefined,
+    const response = await fetch('/api/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      items: [
-        {
-          id: `item-${Date.now()}`,
-          type: course.type === 'training' ? 'training-program' : 'course',
-          itemId: course.id,
-          title: course.title,
-          quantity: form.type === 'corporate' ? 1 : 1,
-          unitPrice: amount,
-          totalPrice: amount,
+      body: JSON.stringify({
+        traineeId: null,
+        type: form.type,
+        customer: {
+          name: form.type === 'corporate' ? form.responsibleName : form.name,
+          email: form.type === 'corporate' ? form.responsibleEmail : form.email,
+          phone: form.type === 'corporate' ? form.responsiblePhone : form.phone,
+          company: form.company || undefined,
+          responsibleName: form.type === 'corporate' ? form.responsibleName : undefined,
+          responsibleEmail: form.type === 'corporate' ? form.responsibleEmail : undefined,
+          responsiblePhone: form.type === 'corporate' ? form.responsiblePhone : undefined,
         },
-      ],
-      subtotal: amount,
-      discount: 0,
-      tax: 0,
-      total: amount,
-      currency: 'SAR',
-      payment: {
-        method: 'bank-transfer',
-        status: 'pending',
-        amount,
+        groupId,
+        items: [
+          {
+            id: `item-${Date.now()}`,
+            type: course.type === 'training' ? 'training-program' : 'course',
+            itemId: course.id,
+            title: course.title,
+            quantity: 1,
+            unitPrice: amount,
+            totalPrice: amount,
+          },
+        ],
+        subtotal: amount,
+        discount: 0,
+        tax: 0,
+        total: amount,
         currency: 'SAR',
-      },
-      status: 'pending',
-      scheduleId: form.scheduleId || undefined,
-      notes:
-        form.notes.trim() ||
-        (form.type === 'corporate'
-          ? 'طلب شركة مضاف يدويًا من لوحة التحكم.'
-          : 'تمت إضافة الطلب يدويًا من لوحة التحكم.'),
+        payment: {
+          method: 'bank-transfer',
+          status: 'pending',
+          amount,
+          currency: 'SAR',
+        },
+        status: 'pending',
+        scheduleId: form.scheduleId || undefined,
+        notes:
+          form.notes.trim() ||
+          (form.type === 'corporate'
+            ? 'طلب شركة مضاف يدويًا من لوحة التحكم.'
+            : 'تمت إضافة الطلب يدويًا من لوحة التحكم.'),
+        expectedTrainees: form.expectedTrainees
+          ? Number(form.expectedTrainees)
+          : null,
+      }),
     });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error || 'تعذر حفظ الطلب.');
+    }
 
     setOpen(false);
     setForm(initialForm);
@@ -660,7 +703,7 @@ companyName: form.company.trim() || undefined,
       <input
         className="admin-input"
         placeholder="مثال: الرياض أو مقر الشركة"
-        required
+        disabled={form.corporateDelivery === 'أونلاين'}
         value={form.corporateLocation}
         onChange={(event) =>
           updateForm('corporateLocation', event.target.value)
@@ -701,6 +744,16 @@ companyName: form.company.trim() || undefined,
                     required
                     value={form.price}
                     onChange={(event) => updateForm('price', event.target.value)}
+                  />
+                </div>
+                <div className="admin-field">
+                  <label>عدد المتدربين المتوقع (اختياري)</label>
+                  <input
+                    className="admin-input"
+                    type="number"
+                    min="0"
+                    value={form.expectedTrainees}
+                    onChange={(event) => updateForm('expectedTrainees', event.target.value)}
                   />
                 </div>
               </div>

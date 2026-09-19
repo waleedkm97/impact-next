@@ -239,21 +239,22 @@ export default function Students() {
 }
 
   async function openAttendance(trainee: any) {
-    const enrollment = trainee.enrollments?.[0];
+    const response = await fetch(
+      `/api/enrollments?traineeId=${encodeURIComponent(trainee.id)}`,
+      { cache: 'no-store' },
+    );
+    const result = await response.json().catch(() => null);
+    const enrollments = result?.enrollments ?? [];
 
-    if (!enrollment) {
+    if (!response.ok || !enrollments.length) {
       alert('لا توجد دورة مسجلة لهذا المتدرب.');
       return;
     }
 
-    await traineeRepository.ensureAttendanceDays(
-      trainee.id,
-      enrollment.id ?? enrollment.courseId,
-    );
-
-    const refreshed = await traineeRepository.findById(trainee.id);
-
-    setAttendanceTrainee(refreshed);
+    setAttendanceTrainee({
+      ...trainee,
+      enrollments,
+    });
   }
 
   async function markAttendance(
@@ -262,12 +263,23 @@ export default function Students() {
     dayIndex: number,
     status: 'present' | 'absent',
   ) {
-    const updated = await traineeRepository.updateAttendanceDay(
-      traineeId,
-      enrollmentId,
-      dayIndex,
-      status,
-    );
+    const response = await fetch('/api/course-learning', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enrollmentId,
+        dayIndex,
+        status,
+      }),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result?.enrollment) {
+      throw new Error(result?.error || 'تعذر حفظ الحضور.');
+    }
+
+    const updated = result.enrollment;
 
     setAttendanceTrainee((current: any) =>
       current

@@ -403,6 +403,16 @@ export default function CourseLearningPage() {
 
   const [assessmentAccess, setAssessmentAccess] = useState<AssessmentAccess[]>([]);
 
+  const groupMeetingLink =
+    (enrollment as CourseEnrollment & {
+      group?: { meetingLink?: string; corporateDelivery?: string | null };
+    } | null)?.group?.meetingLink;
+
+  const isGroupOnline =
+    (enrollment as CourseEnrollment & {
+      group?: { meetingLink?: string; corporateDelivery?: string | null };
+    } | null)?.group?.corporateDelivery === 'أونلاين';
+
   const [
     groupMaterialUrl,
     setGroupMaterialUrl,
@@ -1059,11 +1069,9 @@ export default function CourseLearningPage() {
               </div>
 
               <div className="mt-2 font-semibold text-[#062b67]">
-                {course.delivery ===
-                'online'
+                {(course.delivery === 'online' || isGroupOnline)
                   ? 'أونلاين مباشر'
-                  : course.delivery ===
-                      'hybrid'
+                  : course.delivery === 'hybrid'
                     ? 'هجين'
                     : 'حضوري'}
               </div>
@@ -1171,6 +1179,31 @@ export default function CourseLearningPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+            {(course.delivery === 'online' || isGroupOnline) &&
+              (schedule?.onlineMeetingLink || groupMeetingLink || course.meetingLink) && (
+                <a
+                  href={
+                    schedule?.onlineMeetingLink ||
+                    groupMeetingLink ||
+                    course.meetingLink ||
+                    undefined
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group rounded-2xl border border-[#062b67] bg-blue-50 p-5 text-right transition hover:-translate-y-0.5 hover:shadow-sm"
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-lg text-[#062b67]">
+                    ↗
+                  </div>
+                  <h3 className="mt-4 font-bold text-[#062b67]">
+                    رابط حضور الدورة
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500">
+                    الدخول إلى جلسة الدورة الأونلاين.
+                  </p>
+                </a>
+              )}
 
             {/* المادة التدريبية */}
             <button
@@ -1375,45 +1408,6 @@ export default function CourseLearningPage() {
                       );
                     },
                   )}
-              </div>
-            </section>
-          )}
-
-        {/* موارد الدورة */}
-        {course.delivery ===
-          'online' &&
-          (schedule?.onlineMeetingLink ||
-            course.meetingLink) && (
-            <section className="mt-6 rounded-3xl border bg-white p-6 shadow-sm md:p-8">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-[#062b67]">
-                  موارد الدورة
-                </h2>
-
-                <p className="mt-2 text-sm text-gray-500">
-                  الملفات والروابط الخاصة بتنفيذ الدورة.
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <a
-                  href={
-                    schedule?.onlineMeetingLink ||
-                    course.meetingLink ||
-                    '#'
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-2xl border p-5 text-right transition hover:-translate-y-0.5 hover:border-[#062b67] hover:shadow-sm"
-                >
-                  <h3 className="font-bold text-[#062b67]">
-                    رابط حضور الدورة
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-gray-500">
-                    الدخول إلى جلسة الدورة الأونلاين.
-                  </p>
-                </a>
               </div>
             </section>
           )}

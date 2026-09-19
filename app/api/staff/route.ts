@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { StaffRole, StaffStatus } from '@/types/staff';
+import { hasStaffPermission } from '@/lib/staff-authorization';
 
 function serializeStaff(user: any) {
   const trainerGroupIds = (user.trainerGroups ?? []).map(
@@ -18,6 +19,7 @@ function serializeStaff(user: any) {
     passwordHash: user.passwordHash,
     role: user.role,
     status: user.status,
+    permissions: Array.isArray(user.permissions) ? user.permissions : undefined,
     assignedGroupIds: Array.from(
       new Set([...trainerGroupIds, ...coordinatorGroupIds]),
     ),
@@ -111,6 +113,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'editUsers'))) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const body = await request.json();
 
     if (body.action === 'seed') {
@@ -214,6 +219,7 @@ export async function POST(request: Request) {
     const password = String(body.password ?? '');
     const role = body.role as StaffRole;
     const status = (body.status ?? 'active') as StaffStatus;
+    const permissions = Array.isArray(body.permissions) ? body.permissions : [];
 
     if (!name) {
       return Response.json(
@@ -265,6 +271,7 @@ export async function POST(request: Request) {
         passwordHash: password,
         role,
         status,
+        permissions,
       },
       include: staffInclude,
     });
@@ -288,6 +295,9 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'editUsers'))) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const body = await request.json();
 
     const id = String(body.id ?? '');
@@ -372,6 +382,10 @@ export async function PATCH(request: Request) {
       data.status = body.status;
     }
 
+    if (body.permissions !== undefined) {
+      data.permissions = Array.isArray(body.permissions) ? body.permissions : [];
+    }
+
     if (body.lastLoginAt !== undefined) {
       data.lastLoginAt = body.lastLoginAt
         ? new Date(body.lastLoginAt)
@@ -403,6 +417,9 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'editUsers'))) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const { searchParams } = new URL(request.url);
 
     const id = searchParams.get('id');

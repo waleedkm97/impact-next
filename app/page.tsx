@@ -4,11 +4,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
-import { courseRepository } from '@/lib/data/repositories/course-repository';
+import { fetchCatalog } from '@/lib/public-catalog';
 import type { Course } from '@/types/course';
+import { useLocale } from '@/hooks/use-locale';
 
 export default function HomePage() {
+  const { isEnglish } = useLocale();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; image?: string | null; description?: string | null }>>([]);
+  const [totalCourseCount, setTotalCourseCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,13 +20,13 @@ export default function HomePage() {
 
     async function loadCourses() {
       try {
-        const publishedCourses = await courseRepository.findPublished({
-          sort: 'popularity',
-          order: 'desc',
-        });
+        const catalog = await fetchCatalog({ featured: true });
+        const publishedCourses = catalog.courses;
 
         if (mounted) {
           setCourses(publishedCourses);
+          setCategories(catalog.categories.map((category) => ({ id: category.id, name: category.name, image: category.image, description: category.description })));
+          setTotalCourseCount(catalog.totalCount);
         }
       } catch (error) {
         console.error('Failed to load homepage courses:', error);
@@ -70,7 +74,10 @@ export default function HomePage() {
     [courses]
   );
 
-  const totalPublished = courses.length;
+  const totalPublished = totalCourseCount;
+  const categoryCards = categories
+    .filter((category) => courses.some((course) => course.categoryId === category.id))
+    .slice(0, 8);
 
   return (
     <main dir="rtl" className="homepage">
@@ -805,44 +812,52 @@ export default function HomePage() {
             <div className="eyebrow">Impact Training</div>
 
             <h1>
-              نطوّر المهارات،
+              {isEnglish ? 'We develop skills,' : 'نطوّر المهارات،'}
               <br />
-              <span>ونصنع الأثر.</span>
+              <span>{isEnglish ? 'and create impact.' : 'ونصنع الأثر.'}</span>
             </h1>
 
             <p className="hero-text">
-              حلول تدريبية متخصصة تساعد الأفراد والمنشآت على تطوير المهارات،
-              رفع مستوى الأداء، وتحقيق نتائج عملية قابلة للقياس.
+              {isEnglish
+                ? 'Specialized learning solutions that help people and organizations build skills, improve performance, and deliver measurable results.'
+                : 'حلول تدريبية متخصصة تساعد الأفراد والمنشآت على تطوير المهارات، رفع مستوى الأداء، وتحقيق نتائج عملية قابلة للقياس.'}
             </p>
 
             <div className="hero-actions">
               <Link href="/training-courses" className="btn-primary">
-                استكشف الدورات التدريبية
+                {isEnglish ? 'Explore training programs' : 'استكشف الدورات التدريبية'}
               </Link>
 
               <Link href="/recorded-courses" className="btn-secondary">
-                الدورات المسجلة
+                {isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}
               </Link>
             </div>
           </div>
 
           <div className="hero-visual">
             <div className="hero-logo-card">
-              <Image
-                src="/assets/logo/logo_white-remove.png"
-                alt="Impact Training"
-                width={260}
-                height={120}
-                className="hero-logo"
-                priority
-              />
+              <div
+                className="hero-image"
+                style={{ backgroundImage: `url(${courses[0]?.image || courses[0]?.thumbnail || ''})` }}
+                aria-label={isEnglish ? 'Professional training environment' : 'بيئة تدريب احترافية'}
+              >
+                <div className="hero-image-shade" />
+                <Image
+                  src="/assets/logo/logo_white-remove.png"
+                  alt="Impact Training"
+                  width={180}
+                  height={84}
+                  className="hero-logo"
+                  priority
+                />
+              </div>
 
               <div className="hero-card-title">
-                تدريب يركز على النتائج
+                {isEnglish ? 'Training focused on results' : 'تدريب يركز على النتائج'}
               </div>
 
               <div className="hero-card-subtitle">
-                حلول تدريبية للأفراد والمنشآت
+                {isEnglish ? 'Learning solutions for people and organizations' : 'حلول تدريبية للأفراد والمنشآت'}
               </div>
             </div>
           </div>
@@ -854,17 +869,40 @@ export default function HomePage() {
         <div className="stats-inner">
           <div className="stat">
             <strong>{loading ? '—' : totalPublished}</strong>
-            <span>دورة وبرنامج منشور</span>
+            <span>{isEnglish ? 'Published courses and programs' : 'دورة وبرنامج منشور'}</span>
           </div>
 
           <div className="stat">
-            <strong>مرن</strong>
-            <span>حضوري وأونلاين ومسجل</span>
+            <strong>{isEnglish ? 'Flexible' : 'مرن'}</strong>
+            <span>{isEnglish ? 'In-person, online and recorded' : 'حضوري وأونلاين ومسجل'}</span>
           </div>
 
           <div className="stat">
-            <strong>متكامل</strong>
-            <span>تدريب وتقييم وشهادات</span>
+            <strong>{isEnglish ? 'Complete' : 'متكامل'}</strong>
+            <span>{isEnglish ? 'Learning, assessment and certificates' : 'تدريب وتقييم وشهادات'}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-category-band">
+        <div className="section-inner">
+          <div className="home-category-heading">
+            <div>
+              <p className="eyebrow">{isEnglish ? 'Development tracks' : 'مسارات التطوير'}</p>
+              <h2>{isEnglish ? 'Training topics' : 'موضوعات التدريب'}</h2>
+              <p>{isEnglish ? 'Explore professional topics across the disciplines that move people, teams and organizations forward.' : 'استكشف موضوعات مهنية متنوعة تغطي المجالات التي تطور الأفراد والفرق والمنشآت.'}</p>
+            </div>
+            <Link href="/training-courses" className="section-link">{isEnglish ? 'Explore catalog' : 'استكشف الكتالوج'}</Link>
+          </div>
+          <div className="home-category-grid">
+            {categoryCards.map((category, index) => (
+              <Link key={category.id} href={`/training-courses?category=${encodeURIComponent(category.id)}`} className="home-category-card">
+                <span className="home-category-thumb" style={{ backgroundImage: `url(${category.image || courses.find((course) => course.categoryId === category.id)?.image || ''})` }} />
+                <span className="home-category-index">0{index + 1}</span>
+                <strong>{category.name}</strong>
+                <span>{isEnglish ? 'Professional programs and tracks' : category.description || 'برامج ومسارات مهنية'}</span>
+              </Link>
+            ))}
           </div>
         </div>
       </section>
@@ -874,24 +912,23 @@ export default function HomePage() {
         <div className="section-inner">
           <div className="section-header">
             <div>
-              <h2>البرامج التدريبية</h2>
+              <h2>{isEnglish ? 'Latest training courses' : 'أحدث الدورات التدريبية'}</h2>
               <p>
-                برامج تدريبية منشورة ومتاحة للأفراد، مع مواعيد تنفيذ متعددة
-                حسب البرنامج.
+                {isEnglish ? 'Published programs for individuals, with multiple delivery dates by program.' : 'برامج تدريبية منشورة ومتاحة للأفراد، مع مواعيد تنفيذ متعددة حسب البرنامج.'}
               </p>
             </div>
 
             <Link href="/training-courses" className="section-link">
-              عرض جميع البرامج
+              {isEnglish ? 'View all courses' : 'عرض جميع الدورات'}
             </Link>
           </div>
 
           <div className="course-grid">
             {loading ? (
-              <div className="loading">جاري تحميل البرامج التدريبية...</div>
+              <div className="loading">{isEnglish ? 'Loading training programs...' : 'جاري تحميل البرامج التدريبية...'}</div>
             ) : trainingCourses.length === 0 ? (
               <div className="empty-state">
-                لا توجد برامج تدريبية منشورة حاليًا.
+                {isEnglish ? 'No published training programs are available.' : 'لا توجد برامج تدريبية منشورة حاليًا.'}
               </div>
             ) : (
               trainingCourses.map((course) => (
@@ -907,24 +944,23 @@ export default function HomePage() {
         <div className="section-inner">
           <div className="section-header">
             <div>
-              <h2>الدورات المسجلة</h2>
+              <h2>{isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}</h2>
               <p>
-                تعلّم بمرونة وفي الوقت الذي يناسبك من خلال الدورات المسجلة
-                المتاحة على المنصة.
+                {isEnglish ? 'Learn flexibly at your own pace through courses available on the platform.' : 'تعلّم بمرونة وفي الوقت الذي يناسبك من خلال الدورات المسجلة المتاحة على المنصة.'}
               </p>
             </div>
 
             <Link href="/recorded-courses" className="section-link">
-              عرض جميع الدورات المسجلة
+              {isEnglish ? 'View all recorded courses' : 'عرض جميع الدورات المسجلة'}
             </Link>
           </div>
 
           <div className="course-grid">
             {loading ? (
-              <div className="loading">جاري تحميل الدورات المسجلة...</div>
+              <div className="loading">{isEnglish ? 'Loading recorded courses...' : 'جاري تحميل الدورات المسجلة...'}</div>
             ) : recordedCourses.length === 0 ? (
               <div className="empty-state">
-                لا توجد دورات مسجلة منشورة حاليًا.
+                {isEnglish ? 'No published recorded courses are available.' : 'لا توجد دورات مسجلة منشورة حاليًا.'}
               </div>
             ) : (
               recordedCourses.map((course) => (
@@ -940,50 +976,40 @@ export default function HomePage() {
         <div className="section-inner">
           <div className="section-header">
             <div>
-              <h2>حلول تدريبية للمنشآت</h2>
+              <h2>{isEnglish ? 'Learning solutions for organizations' : 'حلول تدريبية للمنشآت'}</h2>
               <p>
-                لا نقدم دورة فقط، بل نساعد المنشآت على بناء حلول تدريبية
-                تتناسب مع احتياجات فرق العمل وأهدافها.
+                {isEnglish ? 'We help organizations build learning solutions aligned with team needs and business goals.' : 'لا نقدم دورة فقط، بل نساعد المنشآت على بناء حلول تدريبية تتناسب مع احتياجات فرق العمل وأهدافها.'}
               </p>
             </div>
 
             <Link href="/services" className="section-link">
-              استكشف خدماتنا
+              {isEnglish ? 'Explore our services' : 'استكشف خدماتنا'}
             </Link>
           </div>
 
           <div className="services-grid">
             <article className="service-card">
               <span className="service-number">01</span>
-              <h3>التدريب المؤسسي</h3>
-              <p>
-                برامج تدريبية مصممة للمنشآت والفرق وفق الاحتياجات والأهداف
-                المهنية.
-              </p>
+              <h3>{isEnglish ? 'Corporate learning' : 'التدريب المؤسسي'}</h3>
+              <p>{isEnglish ? 'Programs designed for organizations and teams around their capability needs and goals.' : 'برامج تدريبية مصممة للمنشآت والفرق وفق الاحتياجات والأهداف المهنية.'}</p>
             </article>
 
             <article className="service-card">
               <span className="service-number">02</span>
-              <h3>التقييمات المهنية</h3>
-              <p>
-                حلول تساعد المنشآت على قياس المهارات وتحديد فرص التطوير.
-              </p>
+              <h3>{isEnglish ? 'Professional assessments' : 'التقييمات المهنية'}</h3>
+              <p>{isEnglish ? 'Solutions that help organizations measure capability and identify development opportunities.' : 'حلول تساعد المنشآت على قياس المهارات وتحديد فرص التطوير.'}</p>
             </article>
 
             <article className="service-card">
               <span className="service-number">03</span>
-              <h3>التعلم الإلكتروني</h3>
-              <p>
-                محتوى تدريبي رقمي وتجارب تعلم مرنة تدعم التعلم المستمر.
-              </p>
+              <h3>{isEnglish ? 'Digital learning' : 'التعلم الإلكتروني'}</h3>
+              <p>{isEnglish ? 'Digital content and flexible learning experiences that support continuous development.' : 'محتوى تدريبي رقمي وتجارب تعلم مرنة تدعم التعلم المستمر.'}</p>
             </article>
 
             <article className="service-card">
               <span className="service-number">04</span>
-              <h3>الاستشارات التدريبية</h3>
-              <p>
-                دعم متخصص لتصميم وتنفيذ حلول تدريبية متكاملة للمنشآت.
-              </p>
+              <h3>{isEnglish ? 'Learning consulting' : 'الاستشارات التدريبية'}</h3>
+              <p>{isEnglish ? 'Specialist support to design and deliver integrated learning solutions for organizations.' : 'دعم متخصص لتصميم وتنفيذ حلول تدريبية متكاملة للمنشآت.'}</p>
             </article>
           </div>
         </div>
@@ -995,38 +1021,37 @@ export default function HomePage() {
           <div className="why-grid">
             <div className="why-copy">
               <h2>
-                التدريب الذي يتحول
+                {isEnglish ? 'Learning that becomes' : 'التدريب الذي يتحول'}
                 <br />
-                إلى أثر في العمل.
+                {isEnglish ? 'impact at work.' : 'إلى أثر في العمل.'}
               </h2>
 
               <p>
-                نركز على تقديم تجارب تدريبية عملية تجمع بين جودة المحتوى،
-                خبرة المدربين، واحتياجات سوق العمل.
+                {isEnglish ? 'We deliver practical learning experiences that connect content quality, expert facilitation and real workplace needs.' : 'نركز على تقديم تجارب تدريبية عملية تجمع بين جودة المحتوى، خبرة المدربين، واحتياجات سوق العمل.'}
               </p>
 
               <div className="benefits">
                 <div className="benefit">
                   <div className="benefit-mark">01</div>
                   <div>
-                    <strong>محتوى عملي</strong>
-                    <span>يرتبط بالمهارات والتحديات الفعلية في بيئة العمل.</span>
+                    <strong>{isEnglish ? 'Practical content' : 'محتوى عملي'}</strong>
+                    <span>{isEnglish ? 'Connected to real workplace skills and challenges.' : 'يرتبط بالمهارات والتحديات الفعلية في بيئة العمل.'}</span>
                   </div>
                 </div>
 
                 <div className="benefit">
                   <div className="benefit-mark">02</div>
                   <div>
-                    <strong>خيارات تدريب متعددة</strong>
-                    <span>حضوري، أونلاين مباشر، ودورات مسجلة.</span>
+                    <strong>{isEnglish ? 'Multiple formats' : 'خيارات تدريب متعددة'}</strong>
+                    <span>{isEnglish ? 'In-person, live online and recorded learning.' : 'حضوري، أونلاين مباشر، ودورات مسجلة.'}</span>
                   </div>
                 </div>
 
                 <div className="benefit">
                   <div className="benefit-mark">03</div>
                   <div>
-                    <strong>تجربة تدريب متكاملة</strong>
-                    <span>من التسجيل وحتى التقييم والشهادة.</span>
+                    <strong>{isEnglish ? 'Complete experience' : 'تجربة تدريب متكاملة'}</strong>
+                    <span>{isEnglish ? 'From registration through assessment and certification.' : 'من التسجيل وحتى التقييم والشهادة.'}</span>
                   </div>
                 </div>
               </div>
@@ -1036,14 +1061,13 @@ export default function HomePage() {
               <small>IMPACT TRAINING</small>
 
               <h3>
-                نؤمن أن التدريب الحقيقي
+                {isEnglish ? 'We believe real learning' : 'نؤمن أن التدريب الحقيقي'}
                 <br />
-                يبدأ من احتياج واضح.
+                {isEnglish ? 'starts with a clear need.' : 'يبدأ من احتياج واضح.'}
               </h3>
 
               <p>
-                لذلك نصمم حلولنا التدريبية لتكون مرتبطة بالأهداف، قابلة
-                للتطبيق، ومناسبة للأفراد والمنشآت.
+                {isEnglish ? 'That is why our solutions are goal-led, practical and suitable for people and organizations.' : 'لذلك نصمم حلولنا التدريبية لتكون مرتبطة بالأهداف، قابلة للتطبيق، ومناسبة للأفراد والمنشآت.'}
               </p>
             </div>
           </div>
@@ -1055,15 +1079,15 @@ export default function HomePage() {
         <div className="section-inner">
           <div className="cta-box">
             <div>
-              <h2>هل تبحث عن حل تدريبي لمنشأتك؟</h2>
+              <h2>{isEnglish ? 'Looking for a learning solution for your organization?' : 'هل تبحث عن حل تدريبي لمنشأتك؟'}</h2>
 
               <p>
-                تواصل معنا لمناقشة احتياجكم وتصميم الحل التدريبي المناسب.
+                {isEnglish ? 'Talk to us about your needs and design the right learning solution.' : 'تواصل معنا لمناقشة احتياجكم وتصميم الحل التدريبي المناسب.'}
               </p>
             </div>
 
             <Link href="/contact" className="cta-button">
-              تواصل معنا
+              {isEnglish ? 'Contact us' : 'تواصل معنا'}
             </Link>
           </div>
         </div>
@@ -1073,6 +1097,7 @@ export default function HomePage() {
 }
 
 function CourseCard({ course }: { course: Course }) {
+  const { isEnglish } = useLocale();
   const isRecorded = course.type === 'recorded';
 
   const href = isRecorded
@@ -1091,18 +1116,26 @@ function CourseCard({ course }: { course: Course }) {
         ? `${course.hours} ساعة`
         : null;
 
+  const image = course.image || (course.categoryId?.toLowerCase().includes('تقنية')
+    ? 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80'
+    : course.categoryId?.toLowerCase().includes('قيادة')
+      ? 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=900&q=80'
+      : isRecorded
+        ? 'https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=900&q=80'
+        : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=900&q=80');
+
 
   return (
     <article className="course-card">
-      <div className="course-image">
+      <div className="course-image" style={{ backgroundImage: `url(${image})` }}>
         <span className="course-image-label">
-          {isRecorded ? 'دورة مسجلة' : 'برنامج تدريبي'}
+          {isRecorded ? (isEnglish ? 'Recorded course' : 'دورة مسجلة') : (isEnglish ? 'Training program' : 'برنامج تدريبي')}
         </span>
       </div>
 
       <div className="course-body">
         <div className="course-type">
-          {course.featured ? 'برنامج مميز' : 'Impact Training'}
+          {course.featured ? (isEnglish ? 'Featured program' : 'برنامج مميز') : 'Impact Training'}
         </div>
 
         <h3 className="course-title">{course.title}</h3>
@@ -1113,21 +1146,21 @@ function CourseCard({ course }: { course: Course }) {
           {duration && <span>{duration}</span>}
 
           <span>
-            {isRecorded ? 'تعلم مرن' : 'تدريب مهني'}
+            {isRecorded ? (isEnglish ? 'Flexible learning' : 'تعلم مرن') : (isEnglish ? 'Professional training' : 'تدريب مهني')}
           </span>
 
           {course.delivery && (
             <span>
               {course.delivery === 'online'
-                ? 'أونلاين'
-                : 'حضوري'}
+                ? (isEnglish ? 'Online' : 'أونلاين')
+                : (isEnglish ? 'In-person' : 'حضوري')}
             </span>
           )}
         </div>
 
         <div className="course-footer">
           <Link href={href} className="course-button">
-            عرض التفاصيل
+            {isEnglish ? 'View details' : 'عرض التفاصيل'}
           </Link>
         </div>
       </div>

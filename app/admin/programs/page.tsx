@@ -2,7 +2,6 @@
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
-import { categoryRepository } from '@/lib/data/repositories/category-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
 import type {
   Course,
@@ -68,6 +67,7 @@ const emptyForm = {
   price: '',
   description: '',
   objectives: '',
+  outline: '',
   audience: '',
   materials: true,
   pre: true,
@@ -276,10 +276,15 @@ export default function ProgramsAdmin() {
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
 
   async function load() {
-    const [courses, cats] = await Promise.all([
-      courseRepository.findByType('training'),
-      categoryRepository.findAll({ sort: 'name', order: 'asc' }),
+    const [courseResponse, cats] = await Promise.all([
+      fetch('/api/courses', { cache: 'no-store' }),
+      fetch('/api/categories', { cache: 'no-store' }).then((response) => response.json()).then((data) => data.categories ?? []),
     ]);
+
+    const courseData = await courseResponse.json();
+    const courses = (courseData.courses ?? []).filter(
+      (course: Course) => course.type === 'training',
+    );
 
     setPrograms(courses);
     setCategories(cats);
@@ -310,6 +315,26 @@ export default function ProgramsAdmin() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function outlineTopics() {
+    return form.outline.split('\n');
+  }
+
+  function updateOutlineTopic(index: number, value: string) {
+    const topics = outlineTopics();
+    topics[index] = value;
+    setFormValue('outline', topics.join('\n'));
+  }
+
+  function addOutlineTopic() {
+    setFormValue('outline', [...outlineTopics(), ''].join('\n'));
+  }
+
+  function removeOutlineTopic(index: number) {
+    const topics = outlineTopics();
+    topics.splice(index, 1);
+    setFormValue('outline', topics.join('\n'));
+  }
+
   function addCourse() {
     setEditing(null);
     setForm({ ...emptyForm });
@@ -326,6 +351,7 @@ export default function ProgramsAdmin() {
       price: String(course.price ?? ''),
       description: course.description ?? '',
       objectives: (course.objectives ?? []).join('\n'),
+      outline: course.outline ?? '',
       audience: course.audience ?? '',
       materials: course.materialsEnabled !== false,
       pre: course.preAssessmentEnabled !== false,
@@ -356,24 +382,32 @@ export default function ProgramsAdmin() {
       title: form.title.trim(),
       slug: form.title.trim().toLowerCase().replace(/\s+/g, '-'),
       description: form.description.trim(),
-      shortDescription: form.description.trim().slice(0, 180),
+      shortDescription: existing?.shortDescription ?? form.description.trim().slice(0, 180),
       categoryId: form.categoryId || undefined,
       type: 'training',
       trainingKind: existing?.trainingKind ?? 'public',
-      delivery: 'in-person',
-      price: Number(form.price) || 5000,
-      days: 3,
-      hours: 0,
+      delivery: existing?.delivery ?? 'in-person',
+      price: Number(form.price) || Number(existing?.price ?? 5000),
+      oldPrice: existing?.oldPrice ?? null,
+      days: existing?.days ?? 3,
+      hours: existing?.hours ?? 0,
+      cities: existing?.cities ?? [],
       objectives: form.objectives
         .split('\n')
         .map((item) => item.trim())
         .filter(Boolean),
       outcomes: existing?.outcomes ?? [],
-      outline: existing?.outline ?? '',
+      outline: form.outline,
       lessons: existing?.lessons ?? [],
       schedules: existing?.schedules ?? [],
       assessments: existing?.assessments ?? [],
       audience: form.audience,
+      methodology: existing?.methodology ?? null,
+      materialUrl: existing?.materialUrl ?? null,
+      meetingLink: existing?.meetingLink ?? null,
+      image: existing?.image ?? null,
+      thumbnail: existing?.thumbnail ?? null,
+      videosCount: existing?.videosCount ?? 0,
       trainer: {
         id: existing?.trainer?.id ?? makeId('trainer'),
         name: form.trainer,
@@ -414,21 +448,13 @@ export default function ProgramsAdmin() {
       return;
     }
 
-    if (editing) {
-      await courseRepository.update(editing, payload);
-    } else {
-      await courseRepository.create(payload);
-    }
-
     setCourseModal(false);
     await load();
   }
 
   async function togglePublish(course: Course) {
-    await courseRepository.update(course.id, {
-      published: !course.published,
-      status: !course.published ? 'published' : 'draft',
-    });
+    const response = await fetch('/api/courses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: course.id, published: !course.published, status: !course.published ? 'published' : 'draft' }) });
+    if (!response.ok) alert('تعذر تحديث حالة البرنامج.');
 
     await load();
   }
@@ -436,7 +462,15 @@ export default function ProgramsAdmin() {
   async function removeCourse() {
     if (!deleteId) return;
 
-    await courseRepository.delete(deleteId);
+    const response = await fetch(`/api/courses?id=${encodeURIComponent(deleteId)}`, { method: 'DELETE' });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.success) {
+      alert(result?.error ?? 'تعذر حذف البرنامج.');
+      return;
+    }
+    alert(result.action === 'archived'
+      ? 'تمت أرشفة البرنامج لأنه مرتبط بسجلات تاريخية، وأصبح مخفياً من الكتالوج.'
+      : 'تم حذف البرنامج نهائياً.');
     setDeleteId(null);
     await load();
   }
@@ -1467,6 +1501,31 @@ setAssessmentSchedules(updatedSchedules);
                   }
                 />
               </Field>
+
+              <Field label="المحاور" full>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {outlineTopics().map((topic, index) => (
+                    <div key={`program-topic-${index}`} style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        className="admin-input"
+                        value={topic}
+                        placeholder={`المحور ${index + 1}`}
+                        onChange={(event) => updateOutlineTopic(index, event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-light"
+                        onClick={() => removeOutlineTopic(index)}
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" className="admin-btn admin-btn-light" onClick={addOutlineTopic}>
+                    + إضافة محور
+                  </button>
+                </div>
+              </Field>
             </div>
 
             <div className="admin-checkboxes" style={{ marginTop: 16 }}>
@@ -1477,7 +1536,7 @@ setAssessmentSchedules(updatedSchedules);
                 ['evaluation', 'تقييم الدورة'],
                 ['attendance', 'الحضور'],
                 ['published', 'منشور'],
-                ['featured', 'مميز'],
+                ['featured', 'عرض في الصفحة الرئيسية'],
               ].map(([key, label]) => (
                 <label className="admin-checkbox" key={key}>
                   <input

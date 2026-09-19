@@ -32,6 +32,19 @@ export interface TrainingGroup {
   corporateDate?: string;
   corporateDelivery?: 'حضوري' | 'أونلاين';
   corporateLocation?: string;
+  meetingLink?: string;
+  expectedTrainees?: number;
+  materialAvailable?: boolean;
+  course?: {
+    materialUrl?: string | null;
+    meetingLink?: string | null;
+    delivery?: string | null;
+  } | null;
+  schedule?: {
+    onlineMeetingLink?: string | null;
+    location?: string | null;
+    city?: string | null;
+  } | null;
 
   materialUrl?: string;
 

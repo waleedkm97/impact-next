@@ -1,12 +1,65 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@/lib/generated/prisma/client';
+import { hasStaffPermission } from '@/lib/staff-authorization';
+import { scopedGroupWhere } from '@/lib/staff-scope';
 
 
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    if (request.headers.get('cookie')?.includes('impact_staff=')) {
+      const canReadGroups = await Promise.all([
+        hasStaffPermission(request, 'viewGroups'),
+        hasStaffPermission(request, 'viewTrainees'),
+        hasStaffPermission(request, 'manageAttendance'),
+        hasStaffPermission(request, 'viewTrainingMaterials'),
+        hasStaffPermission(request, 'viewAssessments'),
+      ]);
+
+      if (!canReadGroups.some(Boolean)) {
+        return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 });
+      }
+    }
     const groups = await prisma.trainingGroup.findMany({
-      include: {
+      where: await scopedGroupWhere(request),
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        status: true,
+        courseId: true,
+        courseTitle: true,
+        scheduleId: true,
+        corporateDate: true,
+        corporateDelivery: true,
+        corporateLocation: true,
+        meetingLink: true,
+        expectedTrainees: true,
+        companyName: true,
+        responsibleName: true,
+        responsibleEmail: true,
+        responsiblePhone: true,
+        trainerId: true,
+        coordinatorId: true,
+        maxParticipants: true,
+        notes: true,
+        assessmentSettings: true,
+        createdAt: true,
+        updatedAt: true,
+        course: {
+          select: {
+            meetingLink: true,
+            delivery: true,
+          },
+        },
+        schedule: {
+          select: {
+            onlineMeetingLink: true,
+            location: true,
+            city: true,
+          },
+        },
         trainees: {
           select: {
             traineeId: true,
@@ -43,6 +96,9 @@ export async function GET() {
             enrolledAt: true,
             createdAt: true,
             updatedAt: true,
+            attendanceDays: {
+              orderBy: { date: 'asc' },
+            },
           },
         },
       },
@@ -51,8 +107,18 @@ export async function GET() {
       },
     });
 
+    const materialFlags = groups.length
+      ? await prisma.$queryRaw<
+          Array<{ id: string; materialAvailable: boolean }>
+        >`SELECT "id", ("materialUrl" IS NOT NULL) AS "materialAvailable" FROM "TrainingGroup" WHERE "id" IN (${Prisma.join(groups.map((group) => group.id))})`
+      : [];
+    const materialById = new Map(
+      materialFlags.map((item) => [item.id, item.materialAvailable]),
+    );
+
     const result = groups.map((group) => ({
       ...group,
+      materialAvailable: materialById.get(group.id) ?? false,
       traineeIds: group.trainees.map(
         (item) => item.traineeId,
       ),
@@ -78,6 +144,9 @@ export async function POST(
   request: Request,
 ) {
   try {
+    if (!(await hasStaffPermission(request, 'createGroup'))) {
+      return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 });
+    }
     const body = await request.json();
 
     const {
@@ -92,6 +161,8 @@ export async function POST(
       corporateDelivery,
       corporateLocation,
       materialUrl,
+      meetingLink,
+      expectedTrainees,
       companyName,
       responsibleName,
       responsibleEmail,
@@ -157,6 +228,11 @@ export async function POST(
         corporateLocation:
           corporateLocation ?? null,
         materialUrl: materialUrl ?? null,
+        meetingLink: meetingLink ?? null,
+        expectedTrainees:
+          expectedTrainees === null || expectedTrainees === undefined || expectedTrainees === ''
+            ? null
+            : Number(expectedTrainees),
         companyName: companyName ?? null,
         responsibleName:
           responsibleName ?? null,

@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { courseRepository } from '@/lib/data/repositories/course-repository';
-import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
-import { categoryRepository } from '@/lib/data/repositories/category-repository';
+import { useSearchParams } from 'next/navigation';
+import { fetchCatalog } from '@/lib/public-catalog';
+import { useLocale } from '@/hooks/use-locale';
 import type { Course } from '@/types/course';
 import type { Schedule } from '@/types/schedule';
 
@@ -29,7 +29,15 @@ const months = Array.from({ length: 12 }, (_, i) => ({
   }),
 }));
 
+const cityNames: Record<string, string> = {
+  الرياض: 'Riyadh', جدة: 'Jeddah', الدمام: 'Dammam', دبي: 'Dubai',
+  القاهرة: 'Cairo', البحرين: 'Bahrain', قطر: 'Qatar', لندن: 'London',
+  برشلونة: 'Barcelona', ميلان: 'Milan',
+};
+
 export default function TrainingCourses() {
+  const searchParams = useSearchParams();
+  const { isEnglish } = useLocale();
   const [programs, setPrograms] = useState<Course[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [categories, setCategories] = useState<
@@ -40,6 +48,7 @@ export default function TrainingCourses() {
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [month, setMonth] = useState('');
+  const [deliveryMode, setDeliveryMode] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,37 +56,23 @@ export default function TrainingCourses() {
 
     async function load() {
       try {
-        const [programsData, schedulesData, categoriesData] =
-          await Promise.all([
-            courseRepository.findPublished({
-              filter: {
-                type: 'training',
-                trainingKind: 'public',
-              },
-            }),
-            scheduleRepository.findAll({
-              filter: {
-                published: true,
-              },
-              sort: 'startDate',
-              order: 'asc',
-            }),
-            categoryRepository.findAll({
-              sort: 'name',
-              order: 'asc',
-            }),
-          ]);
+            const catalog = await fetchCatalog({
+              type: 'training',
+              includeSchedules: true,
+            });
 
         if (!active) return;
 
-        setPrograms(programsData);
-        setSchedules(schedulesData);
+        setPrograms(catalog.courses);
+        setSchedules(catalog.schedules);
         setCategories(
-          categoriesData.map((item) => ({
+          catalog.categories.map((item) => ({
             id: item.id,
             name: item.name,
           })),
         );
+        const requestedCategory = searchParams.get('category');
+        if (requestedCategory) setCategory(requestedCategory);
       } catch (error) {
         console.error(
           'Failed to load training courses:',
@@ -95,7 +90,7 @@ export default function TrainingCourses() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [searchParams]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -135,11 +130,17 @@ export default function TrainingCourses() {
             Number(month),
         );
 
+        const matchesDelivery =
+          !deliveryMode ||
+          program.delivery === deliveryMode ||
+          (deliveryMode === 'online' && programSchedules.some((schedule) => (schedule.city || '') === 'Online'));
+
       return (
         matchesSearch &&
         matchesCategory &&
         matchesCity &&
-        matchesMonth
+        matchesMonth &&
+        matchesDelivery
       );
     });
   }, [
@@ -149,14 +150,15 @@ export default function TrainingCourses() {
     category,
     city,
     month,
+    deliveryMode,
   ]);
 
   if (loading) {
     return (
-      <main dir="rtl">
+      <main dir={isEnglish ? 'ltr' : 'rtl'}>
         <section className="training-catalog-hero">
           <div className="section-inner">
-            جاري تحميل الدورات التدريبية...
+            {isEnglish ? 'Loading training courses...' : 'جاري تحميل الدورات التدريبية...'}
           </div>
         </section>
       </main>
@@ -164,32 +166,32 @@ export default function TrainingCourses() {
   }
 
   return (
-    <main dir="rtl">
+    <main dir={isEnglish ? 'ltr' : 'rtl'}>
       <section className="training-catalog-hero">
         <div className="section-inner">
           <div className="catalog-top-links">
-            <span>دورة تدريبية معتمدة</span>
-            <span>مدرب معتمد</span>
+              <span>{isEnglish ? 'Professional training' : 'دورة تدريبية معتمدة'}</span>
+            <span>{isEnglish ? 'Expert facilitators' : 'مدرب معتمد'}</span>
             <span>
-              مدن تدريب حول المملكة والخليج
+              {isEnglish ? 'Training locations across the region' : 'مدن تدريب حول المملكة والخليج'}
             </span>
           </div>
 
           <div className="training-filter-box">
             <div className="filter-field filter-search">
-              <label>ابحث عن دورة</label>
+              <label>{isEnglish ? 'Search courses' : 'ابحث عن دورة'}</label>
 
               <input
                 value={search}
                 onChange={(event) =>
                   setSearch(event.target.value)
                 }
-                placeholder="اسم الدورة أو الكلمة المفتاحية"
+                placeholder={isEnglish ? 'Course title or keyword' : 'اسم الدورة أو الكلمة المفتاحية'}
               />
             </div>
 
             <div className="filter-field">
-              <label>التصنيف</label>
+              <label>{isEnglish ? 'Category' : 'التصنيف'}</label>
 
               <select
                 value={category}
@@ -198,7 +200,7 @@ export default function TrainingCourses() {
                 }
               >
                 <option value="">
-                  كل التصنيفات
+                  {isEnglish ? 'All categories' : 'كل التصنيفات'}
                 </option>
 
                 {categories.map((item) => (
@@ -213,7 +215,7 @@ export default function TrainingCourses() {
             </div>
 
             <div className="filter-field">
-              <label>المدينة</label>
+              <label>{isEnglish ? 'City' : 'المدينة'}</label>
 
               <select
                 value={city}
@@ -221,7 +223,7 @@ export default function TrainingCourses() {
                   setCity(event.target.value)
                 }
               >
-                <option value="">كل المدن</option>
+                <option value="">{isEnglish ? 'All cities' : 'كل المدن'}</option>
 
                 {cities.map((item) => (
                   <option
@@ -229,15 +231,15 @@ export default function TrainingCourses() {
                     value={item}
                   >
                     {item === 'Online'
-                      ? 'أونلاين'
-                      : item}
+                      ? (isEnglish ? 'Online' : 'أونلاين')
+                      : (isEnglish ? cityNames[item] ?? item : item)}
                   </option>
                 ))}
               </select>
             </div>
 
             <div className="filter-field">
-              <label>الشهر</label>
+              <label>{isEnglish ? 'Month' : 'الشهر'}</label>
 
               <select
                 value={month}
@@ -246,7 +248,7 @@ export default function TrainingCourses() {
                 }
               >
                 <option value="">
-                  كل الأشهر
+                  {isEnglish ? 'All months' : 'كل الأشهر'}
                 </option>
 
                 {months.map((item) => (
@@ -254,9 +256,20 @@ export default function TrainingCourses() {
                     key={item.value}
                     value={item.value}
                   >
-                    {item.label}
+                    {isEnglish
+                      ? new Date(2026, Number(item.value) - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+                      : item.label}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            <div className="filter-field">
+              <label>{isEnglish ? 'Delivery' : 'طريقة الحضور'}</label>
+              <select value={deliveryMode} onChange={(event) => setDeliveryMode(event.target.value)}>
+                <option value="">{isEnglish ? 'All methods' : 'كل الطرق'}</option>
+                <option value="in_person">{isEnglish ? 'In-person' : 'حضوري'}</option>
+                <option value="online">{isEnglish ? 'Online' : 'أونلاين'}</option>
               </select>
             </div>
 
@@ -265,7 +278,7 @@ export default function TrainingCourses() {
               onClick={() => undefined}
               type="button"
             >
-              بحث
+              {isEnglish ? 'Search' : 'بحث'}
             </button>
           </div>
         </div>
@@ -278,7 +291,7 @@ export default function TrainingCourses() {
               className={!category ? 'active' : ''}
               onClick={() => setCategory('')}
             >
-              كل الدورات
+              {isEnglish ? 'All courses' : 'كل الدورات'}
             </button>
 
             {categories.slice(0, 7).map((item) => (
@@ -297,12 +310,12 @@ export default function TrainingCourses() {
           </div>
 
           <div className="catalog-results-count">
-            عرض {visible.length} من أصل {programs.length} دورة
+            {isEnglish ? `${visible.length} of ${programs.length} courses` : `عرض ${visible.length} من أصل ${programs.length} دورة`}
           </div>
 
           {visible.length === 0 ? (
             <div className="catalog-empty">
-              لا توجد دورات مطابقة لخيارات البحث.
+              {isEnglish ? 'No courses match your filters.' : 'لا توجد دورات مطابقة لخيارات البحث.'}
             </div>
           ) : (
             <div className="cards training-catalog-grid">
@@ -330,16 +343,15 @@ export default function TrainingCourses() {
                   categories.find(
                     (item) =>
                       item.id === program.categoryId,
-                  )?.name || 'برنامج تدريبي';
+                  )?.name || (isEnglish ? 'Training program' : 'برنامج تدريبي');
 
                 return (
                   <article
                     key={program.id}
                     className="training-catalog-card"
                   >
-                    <div className="training-card-image">
+                    <div className="training-card-image" style={{ backgroundImage: `url(${program.image || program.thumbnail || ''})` }}>
                       <span>{categoryName}</span>
-                      <div>برنامج تدريبي</div>
                     </div>
 
                     <div className="training-card-body">
@@ -352,28 +364,26 @@ export default function TrainingCourses() {
 
                       <div className="training-card-meta">
                         <span>
-                          {program.days || 3} أيام
+                          {program.days || 3} {isEnglish ? 'days' : 'أيام'}
                         </span>
 
                         <span>
-                          مواعيد متعددة
+                          {isEnglish ? 'Multiple dates' : 'مواعيد متعددة'}
                         </span>
 
                         <span>
-                          {programSchedules.length} موعد
+                          {programSchedules.length} {isEnglish ? 'dates' : 'موعد'}
                         </span>
                       </div>
 
                       <div className="training-card-price">
                         <small>
-                          تبدأ الأسعار من
+                          {isEnglish ? 'Starting from' : 'تبدأ الأسعار من'}
                         </small>
 
                         <strong>
-                          {startingPrice.toLocaleString(
-                            'ar-SA',
-                          )}{' '}
-                          ر.س
+                          {startingPrice.toLocaleString(isEnglish ? 'en-US' : 'ar-SA')}{' '}
+                          {isEnglish ? 'SAR' : 'ر.س'}
                         </strong>
                       </div>
 
@@ -383,7 +393,7 @@ export default function TrainingCourses() {
                         )}`}
                         className="btn-primary"
                       >
-                        التفاصيل والمواعيد
+                        {isEnglish ? 'Details and dates' : 'التفاصيل والمواعيد'}
                       </Link>
                     </div>
                   </article>

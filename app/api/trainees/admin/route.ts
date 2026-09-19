@@ -1,11 +1,46 @@
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'viewTrainees'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
+    const { searchParams } = new URL(request.url);
+    const activeOnly = searchParams.get('activeOnly') === 'true';
+
+    const scopedStaff = await getScopedStaff(request);
     const trainees = await prisma.trainee.findMany({
+      where: {
+        ...(activeOnly ? { status: 'active' as const } : {}),
+        ...(scopedStaff && !scopedStaff.global
+          ? {
+              enrollments: {
+                some: {
+                  OR: scopedStaff.role === 'trainer'
+                    ? [
+                        { trainerId: scopedStaff.id },
+                        { group: { trainerId: scopedStaff.id } },
+                        { schedule: { trainerId: scopedStaff.id } },
+                      ]
+                    : [
+                        { coordinatorId: scopedStaff.id },
+                        { group: { coordinatorId: scopedStaff.id } },
+                        { schedule: { coordinatorId: scopedStaff.id } },
+                      ],
+                },
+              },
+            }
+          : {}),
+      },
       orderBy: {
         createdAt: 'desc',
       },
       include: {
-        enrollments: true,
+        enrollments: {
+          include: {
+            attendanceDays: {
+              orderBy: { date: 'asc' },
+            },
+          },
+        },
       },
     });
 
@@ -28,6 +63,8 @@ export async function GET() {
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
+import { hasStaffPermission } from '@/lib/staff-authorization';
+import { getScopedStaff } from '@/lib/staff-scope';
 
 function hashPassword(password: string) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -44,8 +81,8 @@ function safeTrainee(trainee: any) {
     id: trainee.id,
     firstName: trainee.firstName,
     lastName: trainee.lastName,
-    firstNameEnglish: trainee.firstNameEn,
-    lastNameEnglish: trainee.lastNameEn,
+    firstNameEnglish: trainee.firstNameEnglish,
+    lastNameEnglish: trainee.lastNameEnglish,
     email: trainee.email,
     phone: trainee.phone,
     status: trainee.status,
@@ -57,6 +94,9 @@ function safeTrainee(trainee: any) {
 
 export async function POST(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'createTrainee'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const body = await request.json();
 
     const email = normalizeEmail(body.email);
@@ -93,7 +133,7 @@ export async function POST(request: Request) {
         id:
           typeof body.id === 'string' && body.id.trim()
             ? body.id.trim()
-            : undefined,
+            : `trainee-${Date.now()}-${crypto.randomBytes(5).toString('hex')}`,
         firstName: String(body.firstName).trim(),
         lastName: String(body.lastName).trim(),
         firstNameEnglish:
@@ -132,6 +172,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'editTrainee'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const body = await request.json();
 
     const id = typeof body.id === 'string' ? body.id.trim() : '';
@@ -235,6 +278,9 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'deleteTrainee'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const body = await request.json();
 
     const id =

@@ -2,8 +2,6 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { courseRepository } from '@/lib/data/repositories/course-repository';
-import { categoryRepository } from '@/lib/data/repositories/category-repository';
 import type { Course } from '@/types/course';
 
 type Form = {
@@ -95,13 +93,15 @@ export default function CoursesAdmin() {
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
     async function load() {
-        const [c, cat] = await Promise.all([
-            courseRepository.findByType('recorded'),
-            categoryRepository.findAll({
-                sort: 'name',
-                order: 'asc',
-            }),
+        const [courseResponse, cat] = await Promise.all([
+            fetch('/api/courses', { cache: 'no-store' }),
+            fetch('/api/categories', { cache: 'no-store' }).then((response) => response.json()).then((data) => data.categories ?? []),
         ]);
+
+        const courseData = await courseResponse.json();
+        const c = (courseData.courses ?? []).filter(
+            (course: Course) => course.type === 'recorded',
+        );
 
         setCourses(c);
         setCategories(cat);
@@ -136,6 +136,28 @@ export default function CoursesAdmin() {
             ...x,
             [key]: value,
         }));
+    }
+
+    function outlineTopics() {
+        return form.outline.split('\n');
+    }
+
+    function updateOutlineTopic(index: number, value: string) {
+        const topics = outlineTopics();
+        topics[index] = value;
+        set('outline', topics.join('\n'));
+    }
+
+    function addOutlineTopic() {
+        set('outline', [...outlineTopics(), ''].join('\n'));
+    }
+
+    function removeOutlineTopic(index: number) {
+        const topics = outlineTopics();
+        topics.splice(index, 1);
+        set('outline', topics.filter((topic, topicIndex) =>
+            topic.trim() || topicIndex === topics.length - 1,
+        ).join('\n'));
     }
 
     function readMaterialFile(file: File) {
@@ -256,12 +278,6 @@ if (!sqlResponse.ok || !sqlData?.success) {
     return;
 }
 
-if (editing) {
-    await courseRepository.update(editing, payload);
-} else {
-    await courseRepository.create(payload);
-}
-
         setOpen(false);
         await load();
     }
@@ -269,7 +285,20 @@ if (editing) {
     async function remove() {
         if (!deleteId) return;
 
-        await courseRepository.delete(deleteId);
+        const response = await fetch(
+            `/api/courses?id=${encodeURIComponent(deleteId)}`,
+            { method: 'DELETE' },
+        );
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.success) {
+            alert(result?.error || 'تعذر حذف الدورة من قاعدة البيانات.');
+            return;
+        }
+
+        alert(result.action === 'archived'
+            ? 'تمت أرشفة الدورة لأنها مرتبطة بسجلات تاريخية، وأصبحت مخفية من الكتالوج.'
+            : 'تم حذف الدورة نهائياً.');
 
         setDeleteId(null);
 
@@ -277,10 +306,8 @@ if (editing) {
     }
 
     async function toggle(c: Course) {
-        await courseRepository.update(c.id, {
-            published: !c.published,
-            status: !c.published ? 'published' : 'draft',
-        });
+        const response = await fetch('/api/courses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id, published: !c.published, status: !c.published ? 'published' : 'draft' }) });
+        if (!response.ok) alert('تعذر تحديث حالة الدورة.');
 
         await load();
     }
@@ -526,9 +553,7 @@ if (editing) {
 
                                         <button
                                             className="admin-btn admin-btn-light"
-                                            onClick={() =>
-                                                toggle(c)
-                                            }
+                                            onClick={() => void toggle(c)}
                                         >
                                             {c.published
                                                 ? 'إلغاء النشر'
@@ -833,17 +858,38 @@ if (editing) {
                                     label="المحاور"
                                     full
                                 >
-                                    <textarea
-                                        className="admin-textarea"
-                                        rows={4}
-                                        value={form.outline}
-                                        onChange={(e) =>
-                                            set(
-                                                'outline',
-                                                e.target.value
-                                            )
-                                        }
-                                    />
+                                    <div style={{ display: 'grid', gap: 8 }}>
+                                        {outlineTopics().map((topic, index) => (
+                                            <div
+                                                key={`topic-${index}`}
+                                                style={{ display: 'flex', gap: 8 }}
+                                            >
+                                                <input
+                                                    className="admin-input"
+                                                    value={topic}
+                                                    placeholder={`المحور ${index + 1}`}
+                                                    onChange={(e) =>
+                                                        updateOutlineTopic(index, e.target.value)
+                                                    }
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="admin-btn admin-btn-light"
+                                                    onClick={() => removeOutlineTopic(index)}
+                                                    aria-label="حذف المحور"
+                                                >
+                                                    حذف
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <button
+                                            type="button"
+                                            className="admin-btn admin-btn-light"
+                                            onClick={addOutlineTopic}
+                                        >
+                                            + إضافة محور
+                                        </button>
+                                    </div>
                                 </Field>
                             </div>
 
@@ -929,7 +975,7 @@ if (editing) {
                                             )
                                         }
                                     />
-                                    مميزة
+                                    عرض في الصفحة الرئيسية
                                 </label>
                             </div>
                         </div>

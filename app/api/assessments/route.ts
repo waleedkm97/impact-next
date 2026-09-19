@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { resolveAssessmentAccess } from '@/lib/assessment-access';
+import { canAccessCourse } from '@/lib/staff-scope';
+import { hasStaffPermission } from '@/lib/staff-authorization';
 
 export async function GET(request: Request) {
   try {
@@ -10,6 +12,19 @@ export async function GET(request: Request) {
       searchParams.get('courseId');
     const enrollmentId = searchParams.get('enrollmentId');
     const traineeId = request.headers.get('x-trainee-id')?.trim();
+
+    if (
+      request.headers.get('cookie')?.includes('impact_staff=') &&
+      !(await hasStaffPermission(request, 'viewAssessments'))
+    ) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
+
+    if (courseId && request.headers.get('cookie')?.includes('impact_staff=')) {
+      if (!(await canAccessCourse(request, courseId))) {
+        return Response.json({ success: false, error: 'الدورة خارج نطاق الإسناد.' }, { status: 403 });
+      }
+    }
 
     const assessments =
       await prisma.courseAssessment.findMany({
@@ -109,8 +124,20 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (
+      request.headers.get('cookie')?.includes('impact_staff=') &&
+      !(await hasStaffPermission(request, 'editAssessments'))
+    ) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const body =
       await request.json();
+
+    if (body.courseId && request.headers.get('cookie')?.includes('impact_staff=')) {
+      if (!(await canAccessCourse(request, String(body.courseId)))) {
+        return Response.json({ success: false, error: 'الدورة خارج نطاق الإسناد.' }, { status: 403 });
+      }
+    }
 
     const {
       id,

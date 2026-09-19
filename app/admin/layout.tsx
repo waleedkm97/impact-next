@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { staffRepository } from '@/lib/data/repositories/staff-repository';
+import type { StaffPermission } from '@/types/staff';
 
 const menuItems = [
   {
@@ -20,6 +21,7 @@ const menuItems = [
     label: 'الدورات المسجلة',
     icon: '▣',
     roles: ['admin'],
+    permission: 'courses' as StaffPermission,
   },
 
   {
@@ -27,6 +29,7 @@ const menuItems = [
     label: 'البرامج التدريبية',
     icon: '▤',
     roles: ['admin'],
+    permission: 'courses' as StaffPermission,
   },
 
   {
@@ -34,6 +37,7 @@ const menuItems = [
     label: 'الفئات',
     icon: '▦',
     roles: ['admin'],
+    permission: 'courses' as StaffPermission,
   },
 
   {
@@ -41,18 +45,22 @@ const menuItems = [
     label: 'الطلبات',
     icon: '▢',
     roles: ['admin'],
+    permission: 'orders' as StaffPermission,
   },
+
 {
   href: '/admin/contact-requests',
   label: 'طلبات التواصل',
   icon: '✉',
   roles: ['admin'],
+  permission: 'contactRequests' as StaffPermission,
 },
   {
     href: '/admin/students',
     label: 'المتدربون',
     icon: '♙',
     roles: ['admin', 'coordinator'],
+    permission: 'trainees' as StaffPermission,
   },
 
   {
@@ -60,6 +68,7 @@ const menuItems = [
     label: 'المجموعات والشركات',
     icon: '▥',
     roles: ['admin'],
+    permission: 'groups' as StaffPermission,
   },
 
   {
@@ -67,6 +76,7 @@ const menuItems = [
     label: 'الكوبونات',
     icon: '◇',
     roles: ['admin'],
+    permission: 'courses' as StaffPermission,
   },
 
   {
@@ -74,6 +84,7 @@ const menuItems = [
     label: 'مستخدمو النظام',
     icon: '♙',
     roles: ['admin'],
+    permission: 'users' as StaffPermission,
   },
 
   {
@@ -81,6 +92,7 @@ const menuItems = [
     label: 'الإعدادات',
     icon: '⚙',
     roles: ['admin'],
+    permission: 'settings' as StaffPermission,
   },
 ];
 
@@ -120,6 +132,7 @@ export default function AdminLayout({
   >>(null);
 
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -234,14 +247,9 @@ export default function AdminLayout({
     );
   }
 
-  const coordinatorAllowedPaths = [
-    '/admin/coordinator',
-    '/admin/students',
-  ];
-
   if (
     staff.role === 'coordinator' &&
-    !coordinatorAllowedPaths.includes(pathname || '')
+    pathname !== '/admin/coordinator'
   ) {
     if (typeof window !== 'undefined') {
       router.replace('/admin/coordinator');
@@ -261,8 +269,55 @@ export default function AdminLayout({
     );
   }
 
+  const employeePermissions = new Set(staff.permissions ?? []);
+  const permissionAliases: Record<string, StaffPermission[]> = {
+    courses: ['viewCourses', 'editCourses'],
+    orders: ['viewOrders', 'editOrders'],
+    trainees: ['viewTrainees'],
+    groups: ['viewGroups'],
+    users: ['viewUsers'],
+    settings: ['viewSettings'],
+    contactRequests: ['viewContactRequests'],
+  };
+  const hasConfiguredPermission = (permission: StaffPermission) =>
+    employeePermissions.has(permission) ||
+    permissionAliases[permission]?.some((alias) => employeePermissions.has(alias)) === true;
+  const employeePathPermissions: Array<[string, StaffPermission]> = [
+    ['/admin/courses', 'courses'],
+    ['/admin/programs', 'courses'],
+    ['/admin/categories', 'courses'],
+    ['/admin/orders', 'orders'],
+    ['/admin/contact-requests', 'contactRequests'],
+    ['/admin/students', 'trainees'],
+    ['/admin/groups', 'groups'],
+    ['/admin/users', 'users'],
+    ['/admin/settings', 'settings'],
+  ];
+  const employeePermission = employeePathPermissions.find(
+    ([path]) => pathname === path || pathname?.startsWith(`${path}/`),
+  )?.[1];
+
+  if (
+    staff.role === 'employee' &&
+    (!employeePermission || !hasConfiguredPermission(employeePermission))
+  ) {
+    const firstAllowed = menuItems.find((item) =>
+      hasConfiguredPermission(item.permission as StaffPermission),
+    );
+    const destination = firstAllowed?.href ?? '/admin';
+
+    if (typeof window !== 'undefined' && pathname !== destination) {
+      router.replace(destination);
+    }
+
+    return <div className="admin-shell" dir="rtl"><div className="admin-main" style={{ padding: 40 }}>لا تملك صلاحية الوصول إلى هذه الصفحة.</div></div>;
+  }
+
   const visibleMenuItems = menuItems.filter((item) =>
-    item.roles.includes(staff.role),
+    item.roles.includes(staff.role) &&
+    (staff.role === 'admin' ||
+      (staff.role === 'employee' &&
+        hasConfiguredPermission(item.permission as StaffPermission)))
   );
 
   const roleLabel =
@@ -270,7 +325,9 @@ export default function AdminLayout({
       ? 'مدير النظام'
       : staff.role === 'coordinator'
         ? 'منسق'
-        : 'مدرب';
+        : staff.role === 'trainer'
+          ? 'مدرب'
+          : 'موظف';
 
   function logout() {
     clearStaffSession();
@@ -280,7 +337,23 @@ export default function AdminLayout({
 
   return (
     <div className="admin-shell" dir="rtl">
-      <aside className="admin-sidebar">
+      <button
+        type="button"
+        className="admin-mobile-toggle"
+        aria-label="فتح قائمة الإدارة"
+        onClick={() => setSidebarOpen((open) => !open)}
+      >
+        ☰
+      </button>
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="admin-mobile-backdrop"
+          aria-label="إغلاق القائمة"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <aside className={`admin-sidebar ${sidebarOpen ? 'is-open' : ''}`}>
         <div className="admin-brand">
           <div className="admin-brand-title">
             Impact Training
@@ -316,6 +389,14 @@ export default function AdminLayout({
           >
             {roleLabel}
           </div>
+
+          <button
+            type="button"
+            className="admin-logout-button"
+            onClick={logout}
+          >
+            تسجيل الخروج
+          </button>
         </div>
 
         <nav className="admin-nav">
@@ -368,12 +449,14 @@ export default function AdminLayout({
             </>
           )}
 
-          {staff.role === 'admin' &&
+          {(staff.role === 'admin' || staff.role === 'employee') &&
             visibleMenuItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="admin-nav-item"
+                className={`admin-nav-item ${pathname === item.href || pathname?.startsWith(`${item.href}/`) ? 'is-active' : ''}`}
+                aria-current={pathname === item.href || pathname?.startsWith(`${item.href}/`) ? 'page' : undefined}
+                onClick={() => setSidebarOpen(false)}
               >
                 <span className="admin-nav-icon">
                   {item.icon}
@@ -396,17 +479,8 @@ export default function AdminLayout({
 
           <button
             type="button"
+            className="admin-logout-button"
             onClick={logout}
-            style={{
-              width: '100%',
-              marginTop: 10,
-              border: 0,
-              background: 'transparent',
-              color: 'rgba(255,255,255,0.7)',
-              cursor: 'pointer',
-              padding: '8px 0',
-              fontSize: 13,
-            }}
           >
             تسجيل الخروج
           </button>

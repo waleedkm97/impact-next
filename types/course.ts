@@ -127,6 +127,15 @@ export interface Course {
   // Target audience
   audience?: string;
   methodology?: string;
+  contentEn?: {
+    title?: string;
+    shortDescription?: string;
+    description?: string;
+    objectives?: string[];
+    outline?: string[] | string;
+    audience?: string;
+    methodology?: string;
+  };
   
   // Trainer information
   trainer?: CourseTrainer;

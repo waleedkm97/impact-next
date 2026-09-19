@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma';
+import { hasStaffPermission } from '@/lib/staff-authorization';
+import { scopedCourseWhere, canAccessCourse } from '@/lib/staff-scope';
 
 const RATING_OPTIONS = [
   '1 - ضعيف جدًا',
@@ -25,11 +27,32 @@ export async function GET(request: Request) {
   try {
     const courseId = new URL(request.url).searchParams.get('id')?.trim();
 
+    if (request.headers.get('cookie')?.includes('impact_staff=')) {
+      const canReadCourse = await Promise.all([
+        hasStaffPermission(request, 'viewCourses'),
+        hasStaffPermission(request, 'viewTrainingMaterials'),
+        hasStaffPermission(request, 'viewTrainees'),
+        hasStaffPermission(request, 'viewAssessments'),
+      ]);
+
+      if (!canReadCourse.some(Boolean)) {
+        return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+      }
+    }
+
+    if (courseId && request.headers.get('cookie')?.includes('impact_staff=')) {
+      if (!(await canAccessCourse(request, courseId))) {
+        return Response.json({ success: false, error: 'الدورة خارج نطاق الإسناد.' }, { status: 403 });
+      }
+    }
+
     if (!courseId) {
-      return Response.json(
-        { success: false, error: 'معرف الدورة مطلوب.' },
-        { status: 400 },
-      );
+      const courses = await prisma.course.findMany({
+        where: await scopedCourseWhere(request),
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return Response.json({ success: true, courses });
     }
 
     const course = await prisma.course.findUnique({
@@ -72,7 +95,33 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (!(await hasStaffPermission(request, 'editCourses'))) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const body = await request.json();
+
+    if (body.id && request.headers.get('cookie')?.includes('impact_staff=')) {
+      if (!(await canAccessCourse(request, String(body.id)))) {
+        return Response.json(
+          { success: false, error: 'الدورة خارج نطاق الإسناد.' },
+          { status: 403 },
+        );
+      }
+    }
+
+    if (body.categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: String(body.categoryId) },
+        select: { id: true },
+      });
+
+      if (!category) {
+        return Response.json(
+          { success: false, error: 'الفئة المحددة غير موجودة في قاعدة البيانات.' },
+          { status: 400 },
+        );
+      }
+    }
 
     if (!body.id || !body.title || !body.slug || !body.type) {
       return Response.json(
@@ -142,6 +191,9 @@ export async function POST(request: Request) {
         outline: body.outline ?? null,
         audience: body.audience ?? null,
         methodology: body.methodology ?? null,
+        ...(body.contentEn !== undefined
+          ? { contentEn: body.contentEn ?? null }
+          : {}),
         materialUrl: body.materialUrl ?? null,
         meetingLink: body.meetingLink ?? null,
         image: body.image ?? null,
@@ -221,6 +273,9 @@ export async function POST(request: Request) {
         outline: body.outline ?? null,
         audience: body.audience ?? null,
         methodology: body.methodology ?? null,
+        ...(body.contentEn !== undefined
+          ? { contentEn: body.contentEn ?? null }
+          : {}),
         materialUrl: body.materialUrl ?? null,
         meetingLink: body.meetingLink ?? null,
         image: body.image ?? null,
@@ -340,7 +395,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const data: Record<string, boolean> = {};
+    const data: Record<string, unknown> = {};
 
     if (
       typeof body.preAssessmentEnabled ===
@@ -373,6 +428,11 @@ export async function PATCH(request: Request) {
       data.attendanceEnabled =
         body.attendanceEnabled;
     }
+
+    if (typeof body.published === 'boolean') data.published = body.published;
+    if (body.status === 'draft' || body.status === 'published' || body.status === 'archived') data.status = body.status;
+    if (typeof body.featured === 'boolean') data.featured = body.featured;
+    if (body.contentEn && typeof body.contentEn === 'object') data.contentEn = body.contentEn;
 
     if (!Object.keys(data).length) {
       return Response.json(
@@ -412,6 +472,67 @@ export async function PATCH(request: Request) {
             : 'تعذر تحديث إعدادات الدورة.',
       },
       { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    if (!(await hasStaffPermission(request, 'editCourses'))) {
+      return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
+
+    const courseId = new URL(request.url).searchParams.get('id')?.trim();
+
+    if (!courseId) {
+      return Response.json(
+        { success: false, error: 'معرف الدورة مطلوب.' },
+        { status: 400 },
+      );
+    }
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true },
+    });
+
+    if (!course) {
+      return Response.json(
+        { success: false, error: 'الدورة غير موجودة.' },
+        { status: 404 },
+      );
+    }
+
+    const dependencies = await prisma.$transaction([
+      prisma.courseEnrollment.count({ where: { courseId } }),
+      prisma.orderItem.count({ where: { itemId: courseId } }),
+      prisma.certificate.count({ where: { courseId } }),
+      prisma.trainingGroup.count({ where: { courseId } }),
+      prisma.courseProgress.count({ where: { courseId } }),
+    ]);
+    const dependencyCount = dependencies.reduce((total, count) => total + count, 0);
+
+    if (dependencyCount > 0) {
+      const archived = await prisma.course.update({
+        where: { id: courseId },
+        data: { published: false, featured: false, status: 'archived' },
+      });
+      return Response.json({ success: true, action: 'archived', course: archived });
+    }
+
+    await prisma.course.delete({ where: { id: courseId } });
+    return Response.json({ success: true, action: 'deleted' });
+  } catch (error) {
+    console.error('DELETE /api/courses error:', error);
+    return Response.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'تعذر حذف الدورة من قاعدة البيانات.',
+      },
+      { status: 409 },
     );
   }
 }

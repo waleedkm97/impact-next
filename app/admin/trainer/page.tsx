@@ -7,6 +7,11 @@ import { staffRepository } from '@/lib/data/repositories/staff-repository';
 import type { TrainingGroup } from '@/types/group';
 import type { Trainee } from '@/types/trainee';
 import type { StaffUser } from '@/types/staff';
+import type { StaffPermission } from '@/types/staff';
+
+function can(permission: StaffUser['permissions'], value: StaffPermission) {
+  return permission?.includes(value) ?? false;
+}
 
 function getCookie(name: string) {
   if (typeof document === 'undefined') return '';
@@ -37,9 +42,13 @@ export default function TrainerPage() {
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [newTraineeId, setNewTraineeId] = useState('');
+  const [newTraineeForm, setNewTraineeForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
 
   async function load() {
     setLoading(true);
+
+    try {
 
     const staffId = getCookie('impact_staff');
     if (!staffId) {
@@ -54,10 +63,23 @@ export default function TrainerPage() {
       return;
     }
 
-    const [allGroups, allTrainees] = await Promise.all([
-      groupRepository.findAll(),
-      traineeRepository.findAll(),
+    const [groupsResponse, traineesResponse] = await Promise.all([
+      fetch('/api/groups', { cache: 'no-store' }),
+      fetch('/api/trainees/admin?activeOnly=true', { cache: 'no-store' }),
     ]);
+
+    const allGroups: TrainingGroup[] = groupsResponse.ok ? (await groupsResponse.json()).map((group: any) => ({
+      ...group,
+      traineeIds: Array.isArray(group.traineeIds) ? group.traineeIds : [],
+      createdAt: new Date(group.createdAt),
+      updatedAt: new Date(group.updatedAt),
+    })) : [];
+    const traineeData = traineesResponse.ok ? await traineesResponse.json() : { trainees: [] };
+    const allTrainees = (traineeData.trainees ?? []).map((trainee: any) => ({
+      ...trainee,
+      profile: { firstName: trainee.firstName ?? '', lastName: trainee.lastName ?? '' },
+      contact: { email: trainee.email ?? '', phone: trainee.phone ?? '' },
+    }));
 
     setStaff(currentStaff);
     setGroups(
@@ -69,6 +91,10 @@ export default function TrainerPage() {
     );
     setTrainees(allTrainees);
     setLoading(false);
+    } catch (error) {
+      console.error('Failed to load trainer dashboard:', error);
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -90,7 +116,7 @@ export default function TrainerPage() {
     dayIndex: number,
     status: 'present' | 'absent',
   ) {
-    if (!selectedGroup) return;
+    if (!selectedGroup || !can(staff?.permissions, 'manageAttendance')) return;
 
     const enrollment = trainee.enrollments?.find(
       (item) =>
@@ -105,19 +131,101 @@ export default function TrainerPage() {
       return;
     }
 
-    await traineeRepository.ensureAttendanceDays(
-      trainee.id,
-      enrollment.id ?? enrollment.courseId,
-    );
+    const response = await fetch('/api/course-learning', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enrollmentId: enrollment.id,
+        dayIndex,
+        status,
+      }),
+    });
 
-    await traineeRepository.updateAttendanceDay(
-      trainee.id,
-      enrollment.id ?? enrollment.courseId,
-      dayIndex,
-      status,
-    );
+    const result = await response.json().catch(() => null);
 
+    if (!response.ok) {
+      throw new Error(result?.error || 'تعذر حفظ الحضور.');
+    }
+
+    if (result?.enrollment) {
+      setTrainees((current) => current.map((item) =>
+        item.id === trainee.id
+          ? {
+              ...item,
+              enrollments: item.enrollments.map((itemEnrollment) =>
+                itemEnrollment.id === enrollment.id
+                  ? { ...itemEnrollment, ...result.enrollment }
+                  : itemEnrollment,
+              ),
+            }
+          : item,
+      ));
+    }
+  }
+
+  async function addTrainee() {
+    if (!selectedGroup || !newTraineeId || !can(staff?.permissions, 'createTrainee')) return;
+    const response = await fetch(`/api/groups/${selectedGroup.id}/trainees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ traineeId: newTraineeId }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      alert(data?.error || 'تعذر إضافة المتدرب.');
+      return;
+    }
+    setNewTraineeId('');
     await load();
+  }
+
+  async function removeTrainee(traineeId: string) {
+    if (!selectedGroup || !can(staff?.permissions, 'deleteTrainee')) return;
+    const response = await fetch(`/api/groups/${selectedGroup.id}/trainees`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ traineeId }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      alert(data?.error || 'تعذر حذف المتدرب.');
+      return;
+    }
+    await load();
+  }
+
+  async function createTrainee() {
+    if (!can(staff?.permissions, 'createTrainee')) return;
+    const response = await fetch('/api/trainees/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newTraineeForm, status: 'active', emailVerified: true }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success) {
+      alert(data?.error || 'تعذر إنشاء المتدرب.');
+      return;
+    }
+    setNewTraineeForm({ firstName: '', lastName: '', email: '', password: '' });
+    setNewTraineeId(data.trainee.id);
+    await load();
+    setTrainees((current) => [
+      ...current.filter((item) => item.id !== data.trainee.id),
+      {
+        ...data.trainee,
+        profile: {
+          firstName: data.trainee.firstName ?? '',
+          lastName: data.trainee.lastName ?? '',
+        },
+        contact: {
+          email: data.trainee.email ?? '',
+          phone: data.trainee.phone ?? '',
+        },
+        enrollments: [],
+        progress: [],
+        certificates: [],
+      },
+    ]);
   }
 
   if (loading) {
@@ -257,11 +365,49 @@ export default function TrainerPage() {
             </span>
           </div>
 
+          {can(staff?.permissions, 'viewTrainingMaterials') && selectedGroup.materialAvailable && (
+            <div style={{ marginBottom: 18, padding: 14, border: '1px solid #e5e7eb', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <strong>المادة التدريبية</strong>
+                <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 13 }}>المادة الخاصة بالمجموعة.</p>
+              </div>
+              <a href={`/api/groups/${encodeURIComponent(selectedGroup.id)}/material`} target="_blank" rel="noreferrer" className="admin-btn admin-btn-primary">فتح المادة</a>
+            </div>
+          )}
+
+          {(selectedGroup.meetingLink || selectedGroup.schedule?.onlineMeetingLink || selectedGroup.course?.meetingLink) && (
+            <a
+              href={selectedGroup.meetingLink || selectedGroup.schedule?.onlineMeetingLink || selectedGroup.course?.meetingLink || undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="admin-btn admin-btn-primary"
+            >
+              رابط الحضور
+            </a>
+          )}
+
           {members.length === 0 ? (
             <div className="admin-empty">
               لا يوجد متدربون في هذه المجموعة حاليًا.
             </div>
           ) : (
+            <>
+            {can(staff?.permissions, 'createTrainee') && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <input className="admin-input" placeholder="الاسم الأول" value={newTraineeForm.firstName} onChange={(e) => setNewTraineeForm({ ...newTraineeForm, firstName: e.target.value })} />
+                <input className="admin-input" placeholder="اسم العائلة" value={newTraineeForm.lastName} onChange={(e) => setNewTraineeForm({ ...newTraineeForm, lastName: e.target.value })} />
+                <input className="admin-input" type="email" placeholder="البريد" value={newTraineeForm.email} onChange={(e) => setNewTraineeForm({ ...newTraineeForm, email: e.target.value })} />
+                <input className="admin-input" type="password" placeholder="كلمة المرور" value={newTraineeForm.password} onChange={(e) => setNewTraineeForm({ ...newTraineeForm, password: e.target.value })} />
+                <button type="button" className="admin-btn admin-btn-light" onClick={() => void createTrainee()}>إنشاء متدرب جديد</button>
+                <select className="admin-select" value={newTraineeId} onChange={(event) => setNewTraineeId(event.target.value)}>
+                  <option value="">اختر متدربًا لإضافته</option>
+                  {trainees.filter((trainee) => !selectedGroup.traineeIds.includes(trainee.id)).map((trainee) => (
+                    <option key={trainee.id} value={trainee.id}>{getTraineeName(trainee)}</option>
+                  ))}
+                </select>
+                <button type="button" className="admin-btn admin-btn-primary" onClick={() => void addTrainee()}>إضافة متدرب</button>
+              </div>
+            )}
             <div className="admin-table-card" style={{ overflowX: 'auto' }}>
               <table className="admin-table">
                 <thead>
@@ -301,7 +447,7 @@ export default function TrainerPage() {
                                 flexWrap: 'wrap',
                               }}
                             >
-                              <button
+                              {can(staff?.permissions, 'manageAttendance') && <button
                                 type="button"
                                 className={
                                   days[dayIndex]?.status === 'present'
@@ -318,9 +464,9 @@ export default function TrainerPage() {
                                 }
                               >
                                 حاضر
-                              </button>
+                              </button>}
 
-                              <button
+                              {can(staff?.permissions, 'manageAttendance') && <button
                                 type="button"
                                 className={
                                   days[dayIndex]?.status === 'absent'
@@ -337,7 +483,12 @@ export default function TrainerPage() {
                                 }
                               >
                                 غائب
-                              </button>
+                              </button>}
+                              {can(staff?.permissions, 'deleteTrainee') && (
+                                <button type="button" className="admin-btn admin-btn-danger" onClick={() => void removeTrainee(trainee.id)}>
+                                  حذف المتدرب
+                                </button>
+                              )}
                             </div>
                           </td>
                         ))}
@@ -347,6 +498,7 @@ export default function TrainerPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </section>
       )}

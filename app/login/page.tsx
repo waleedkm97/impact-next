@@ -67,10 +67,22 @@ export default function Login() {
           router.push(
             '/admin/coordinator',
           );
-        } else {
+        } else if (staff.role === 'trainer') {
           router.push(
             '/admin/trainer',
           );
+        } else {
+          const firstPermission = staff.permissions?.[0];
+          const permissionPaths: Record<string, string> = {
+            courses: '/admin/courses',
+            orders: '/admin/orders',
+            trainees: '/admin/students',
+            groups: '/admin/groups',
+            users: '/admin/users',
+            settings: '/admin/settings',
+            contactRequests: '/admin/contact-requests',
+          };
+          router.push(permissionPaths[firstPermission ?? ''] ?? '/admin');
         }
 
         router.refresh();

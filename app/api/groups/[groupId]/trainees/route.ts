@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { initialAssessmentStates } from '@/lib/assessment-access';
+import { hasStaffPermission } from '@/lib/staff-authorization';
+import { canAccessGroup } from '@/lib/staff-scope';
 
 type Params = {
   params: Promise<{ groupId: string }>;
@@ -8,6 +10,15 @@ type Params = {
 
 export async function POST(request: Request, { params }: Params) {
   try {
+    if (
+      !(await hasStaffPermission(request, 'createTrainee')) &&
+      !(await hasStaffPermission(request, 'editGroup'))
+    ) {
+      return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 });
+    }
+    if (!(await canAccessGroup(request, (await params).groupId))) {
+      return NextResponse.json({ error: 'المجموعة خارج نطاق الإسناد.' }, { status: 403 });
+    }
     const { groupId } = await params;
     const body = await request.json();
 
@@ -123,6 +134,12 @@ export async function DELETE(
   },
 ) {
   try {
+    if (!(await hasStaffPermission(request, 'editGroup'))) {
+      return NextResponse.json({ error: 'غير مصرح.' }, { status: 403 });
+    }
+    if (!(await canAccessGroup(request, (await params).groupId))) {
+      return NextResponse.json({ error: 'المجموعة خارج نطاق الإسناد.' }, { status: 403 });
+    }
     const { groupId } = await params;
     const body = await request.json();
 

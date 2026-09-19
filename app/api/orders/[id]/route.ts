@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { initialAssessmentStates } from '@/lib/assessment-access';
+import { hasStaffPermission } from '@/lib/staff-authorization';
 
 export async function PATCH(
   request: Request,
@@ -9,6 +10,9 @@ export async function PATCH(
   },
 ) {
   try {
+    if (!(await hasStaffPermission(request, 'editOrders'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
     const { id } = await context.params;
 
     const body = await request.json();
@@ -31,6 +35,55 @@ export async function PATCH(
         },
         { status: 404 },
       );
+    }
+
+    if (body?.mode === 'details') {
+      const updatedOrder = await prisma.order.update({
+        where: { id },
+        data: {
+          type: body.type === 'corporate' ? 'corporate' : 'public',
+          customerName: body.customer?.name || order.customerName,
+          customerEmail: body.customer?.email || order.customerEmail,
+          customerPhone: body.customer?.phone || null,
+          customerCompany: body.customer?.company || null,
+          responsibleName: body.customer?.responsibleName || null,
+          responsibleEmail: body.customer?.responsibleEmail || null,
+          responsiblePhone: body.customer?.responsiblePhone || null,
+          subtotal: Number(body.subtotal ?? order.subtotal),
+          total: Number(body.total ?? order.total),
+          scheduleId: body.scheduleId || null,
+          notes: body.notes || null,
+          expectedTrainees:
+            body.expectedTrainees === null || body.expectedTrainees === undefined || body.expectedTrainees === ''
+              ? null
+              : Number(body.expectedTrainees),
+          metadata: body.metadata || null,
+          items: {
+            deleteMany: {},
+            create: (body.items ?? []).map((item: any) => ({
+              id: item.id || crypto.randomUUID(),
+              type: item.type === 'training-program' || item.type === 'training_program'
+                ? 'training_program'
+                : item.type === 'service'
+                  ? 'service'
+                  : 'course',
+              itemId: item.itemId,
+              title: item.title,
+              quantity: Number(item.quantity || 1),
+              unitPrice: Number(item.unitPrice || 0),
+              totalPrice: Number(item.totalPrice || 0),
+              discount: item.discount == null ? null : Number(item.discount),
+            })),
+          },
+        },
+        include: {
+          items: true,
+          schedule: true,
+          trainee: true,
+        },
+      });
+
+      return NextResponse.json({ success: true, order: updatedOrder });
     }
 
     if (status === 'confirmed') {
@@ -246,6 +299,39 @@ export async function PATCH(
           error instanceof Error
             ? error.message
             : 'تعذر تحديث الطلب.',
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  context: {
+    params: Promise<{ id: string }>;
+  },
+) {
+  try {
+    if (!(await hasStaffPermission(_request, 'editOrders'))) {
+      return NextResponse.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+    }
+    const { id } = await context.params;
+
+    await prisma.order.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/orders/[id] error:', error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'تعذر حذف الطلب.',
       },
       { status: 500 },
     );

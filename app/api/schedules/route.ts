@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma';
+import { scopedScheduleWhere, canAccessCourse } from '@/lib/staff-scope';
+import { hasStaffPermission } from '@/lib/staff-authorization';
 import {
   ScheduleRecurrence,
   ScheduleStatus,
@@ -151,6 +153,16 @@ function buildWhere(searchParams: URLSearchParams) {
 
 export async function GET(request: Request) {
   try {
+    if (request.headers.get('cookie')?.includes('impact_staff=')) {
+      const canRead = await Promise.all([
+        hasStaffPermission(request, 'viewCourses'),
+        hasStaffPermission(request, 'viewGroups'),
+        hasStaffPermission(request, 'viewTrainingMaterials'),
+      ]);
+      if (!canRead.some(Boolean)) {
+        return Response.json({ success: false, error: 'غير مصرح.' }, { status: 403 });
+      }
+    }
     const { searchParams } = new URL(request.url);
     const where = buildWhere(searchParams);
     const id = searchParams.get('id');
@@ -160,6 +172,10 @@ export async function GET(request: Request) {
         where: { id },
         include: scheduleInclude,
       });
+
+      if (schedule && request.headers.get('cookie')?.includes('impact_staff=') && !(await canAccessCourse(request, schedule.courseId))) {
+        return Response.json({ success: false, error: 'الموعد خارج نطاق الإسناد.' }, { status: 403 });
+      }
 
       return Response.json({
         success: true,
@@ -182,6 +198,7 @@ export async function GET(request: Request) {
 
     const finalWhere: any = {
       ...where,
+      ...(request.headers.get('cookie')?.includes('impact_staff=') ? await scopedScheduleWhere(request) : {}),
       ...(available
         ? {
             status: 'available',

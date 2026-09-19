@@ -88,6 +88,7 @@ export interface Order {
   
   // Additional information
   notes?: string;
+  expectedTrainees?: number;
   metadata?: Record<string, unknown>;
   
   // For training bookings
