@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { staffRepository } from '@/lib/data/repositories/staff-repository';
 import type { StaffUser } from '@/types/staff';
 

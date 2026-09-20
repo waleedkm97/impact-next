@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { serviceRepository } from '@/lib/data/repositories/service-repository';
 import type { Service } from '@/types/service';
 import { useLocale } from '@/hooks/use-locale';

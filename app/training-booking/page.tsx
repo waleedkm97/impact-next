@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
@@ -9,7 +9,7 @@ import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import type { Course } from '@/types/course';
 import type { Schedule } from '@/types/schedule';
 
-export default function TrainingBookingPage() {
+function TrainingBookingContent() {
   const router = useRouter();
   const scheduleId =
     useSearchParams().get('id') || '';
@@ -720,5 +720,22 @@ export default function TrainingBookingPage() {
         </aside>
       </div>
     </main>
+  );
+}
+
+export default function TrainingBookingPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل صفحة التسجيل...
+        </main>
+      }
+    >
+      <TrainingBookingContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type {
   Course,
@@ -364,7 +364,7 @@ function AssessmentCard({ type, access, courseId, enrollmentId }: {
   ) : <div className={className} aria-disabled="true">{content}</div>;
 }
 
-export default function CourseLearningPage() {
+function CourseLearningContent() {
   const searchParams =
     useSearchParams();
 
@@ -1600,5 +1600,21 @@ export default function CourseLearningPage() {
 
       </div>
     </main>
+  );
+}
+export default function CourseLearningPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل الدورة...
+        </main>
+      }
+    >
+      <CourseLearningContent />
+    </Suspense>
   );
 }

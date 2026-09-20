@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { fetchCatalog } from '@/lib/public-catalog';
 import type { Course } from '@/types/course';
 import { useLocale } from '@/hooks/use-locale';

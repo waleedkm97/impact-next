@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import type { Course } from '@/types/course';
 
-export default function CoursePreparationPage() {
+function CoursePreparationContent() {
   const searchParams = useSearchParams();
   const courseId = searchParams.get('courseId') || '';
 
@@ -248,5 +248,21 @@ setAllowed(sqlEnrolled);
         </section>
       </div>
     </main>
+  );
+}
+export default function CoursePreparationPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل التحضير...
+        </main>
+      }
+    >
+      <CoursePreparationContent />
+    </Suspense>
   );
 }

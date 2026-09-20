@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { fetchCatalog } from '@/lib/public-catalog';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { useLocale } from '@/hooks/use-locale';
 import type { Course } from '@/types/course';
 
-export default function CourseDetails() {
+function CourseDetailsContent() {
   const { isEnglish } = useLocale();
   const id =
     useSearchParams().get('id') || '';
@@ -251,5 +251,21 @@ export default function CourseDetails() {
         )}
       </div>
     </main>
+  );
+}
+export default function CourseDetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل تفاصيل الدورة...
+        </main>
+      }
+    >
+      <CourseDetailsContent />
+    </Suspense>
   );
 }

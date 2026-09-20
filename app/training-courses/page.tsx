@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { fetchCatalog } from '@/lib/public-catalog';
 import { useLocale } from '@/hooks/use-locale';
@@ -35,7 +35,7 @@ const cityNames: Record<string, string> = {
   برشلونة: 'Barcelona', ميلان: 'Milan',
 };
 
-export default function TrainingCourses() {
+function TrainingCoursesContent() {
   const searchParams = useSearchParams();
   const { isEnglish } = useLocale();
   const [programs, setPrograms] = useState<Course[]>([]);
@@ -404,5 +404,21 @@ export default function TrainingCourses() {
         </div>
       </section>
     </main>
+  );
+}
+export default function TrainingCourses() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل الدورات...
+        </main>
+      }
+    >
+      <TrainingCoursesContent />
+    </Suspense>
   );
 }

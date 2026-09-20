@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import type { Course } from '@/types/course';
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter();
   const id = useSearchParams().get('id') || '';
   const [course, setCourse] = useState<Course | null>(null);
@@ -267,5 +267,21 @@ export default function CheckoutPage() {
         </aside>
       </div>
     </main>
+  );
+}
+export default function CheckoutPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل صفحة الدفع...
+        </main>
+      }
+    >
+      <CheckoutContent />
+    </Suspense>
   );
 }

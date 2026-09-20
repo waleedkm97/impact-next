@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { categoryRepository } from '@/lib/data/repositories/category-repository';
 import type { Course } from '@/types/course';

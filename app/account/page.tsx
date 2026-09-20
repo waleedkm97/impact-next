@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { courseRepository } from '@/lib/data/repositories/course-repository';

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { useLocale } from '@/hooks/use-locale';

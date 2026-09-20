@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { couponRepository } from '@/lib/data/repositories/coupon-repository';
 export default function Coupons() { const [c, setC] = useState<any[]>([]); const [open, setOpen] = useState(false); const [editing, setEditing] = useState<string | null>(null); const [code, setCode] = useState(''); const [value, setValue] = useState('10'); async function load() { setC(await couponRepository.findAll()); } useEffect(() => { void load(); }, []); function add() { setEditing(null); setCode(''); setValue('10'); setOpen(true); } function edit(x: any) { setEditing(x.id); setCode(x.code); setValue(String(x.value)); setOpen(true); } async function save(e: React.FormEvent) { e.preventDefault(); if (editing)
     await couponRepository.update(editing, { code: code.trim().toUpperCase(), value: Number(value) || 0 });

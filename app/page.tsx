@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { fetchCatalog } from '@/lib/public-catalog';
 import type { Course } from '@/types/course';
@@ -1000,7 +1000,7 @@ export default function HomePage() {
           <div className="section-head">
             <div>
               <div className="eyebrow">{isEnglish ? 'Featured learning' : 'التدريب المميز'}</div>
-              <h2>{isEnglish ? 'Latest training courses' : 'أبرز الدورات التدريبية'}</h2>
+              <h2>{isEnglish ? 'Latest training courses' :'أبرز الدورات التدريبية'}</h2>
               <p>{isEnglish ? 'Discover selected programs designed for practical impact.' : 'اكتشف برامج مختارة مصممة لتمنحك رحلة تدريبية عملية ومؤثرة.'}</p>
             </div>
             <Link href="/training-courses" className="section-link">

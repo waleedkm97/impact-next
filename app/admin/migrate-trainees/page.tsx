@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import type { Trainee } from '@/types/trainee';
 

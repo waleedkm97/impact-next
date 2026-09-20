@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Trainee, Certificate } from '@/types/trainee';
 import type { Course } from '@/types/course';
@@ -268,7 +268,7 @@ function CertificateSheet({
   );
 }
 
-export default function CertificatePage() {
+function CertificateContent() {
   const searchParams = useSearchParams();
 
   const courseId =
@@ -1236,5 +1236,21 @@ export default function CertificatePage() {
         }
       `}</style>
     </main>
+  );
+}
+export default function CertificatePage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل الشهادة...
+        </main>
+      }
+    >
+      <CertificateContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { fetchCatalog } from '@/lib/public-catalog';
 import { useLocale } from '@/hooks/use-locale';
@@ -27,7 +27,7 @@ function formatDateRange(schedule: Schedule) {
   return start === end ? start : `${start} — ${end}`;
 }
 
-export default function TrainingProgram() {
+function TrainingProgramContent() {
   const id = useSearchParams().get('id') || '';
   const { isEnglish } = useLocale();
   const [course, setCourse] = useState<Course | null>(null);
@@ -204,5 +204,21 @@ setLoading(false);
         </aside>
       </div>
     </main>
+  );
+}
+export default function TrainingProgramPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل البرنامج...
+        </main>
+      }
+    >
+      <TrainingProgramContent />
+    </Suspense>
   );
 }

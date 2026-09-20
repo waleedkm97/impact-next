@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { scheduleRepository } from '@/lib/data/repositories/schedule-repository';
 import type { Schedule } from '@/types/schedule';

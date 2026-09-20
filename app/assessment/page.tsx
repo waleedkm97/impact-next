@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { CourseAssessment } from '@/types/course';
 
@@ -10,7 +10,7 @@ function getTraineeIdFromCookie() {
   return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
 }
 
-export default function AssessmentPage() {
+function AssessmentContent() {
   const params = useSearchParams();
 
   const courseId = params.get('courseId') || '';
@@ -667,5 +667,21 @@ export default function AssessmentPage() {
         تسليم التقييم
       </button>
     </main>
+  );
+}
+export default function AssessmentPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل التقييم...
+        </main>
+      }
+    >
+      <AssessmentContent />
+    </Suspense>
   );
 }

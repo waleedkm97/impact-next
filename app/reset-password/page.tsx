@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token') || '';
 
@@ -281,5 +281,21 @@ export default function ResetPasswordPage() {
         </div>
       </section>
     </main>
+  );
+}
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل إعادة تعيين كلمة المرور...
+        </main>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

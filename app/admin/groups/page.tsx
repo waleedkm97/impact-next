@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { groupRepository } from '@/lib/data/repositories/group-repository';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 type Category = {
     id: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
@@ -15,7 +15,7 @@ function setStaffSession(id: string) {
     `SameSite=Lax`;
 }
 
-export default function Login() {
+function LoginContent() {
   const [email, setEmail] =
     useState('');
 
@@ -268,5 +268,21 @@ if (!sessionUser) {
         </p>
       </form>
     </main>
+  );
+}
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen flex items-center justify-center"
+        >
+          جاري تحميل تسجيل الدخول...
+        </main>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

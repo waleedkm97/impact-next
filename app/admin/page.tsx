@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { courseRepository } from '@/lib/data/repositories/course-repository';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { orderRepository } from '@/lib/data/repositories/order-repository';
