@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-
-import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 import { staffRepository } from '@/lib/data/repositories/staff-repository';
 
 function setStaffSession(id: string) {
@@ -125,41 +123,10 @@ if (
   return;
 }
 
-/*
- * نبحث عن النسخة المحلية للمتدرب بنفس البريد
- * حتى تستمر صفحات Account والكورسات الحالية
- * باستخدام الـ ID المحلي الموجود لديها.
- */
-const localUser =
-  await traineeRepository.findByEmail(email);
-
-if (!localUser) {
-  setMsg(
-    'تم تسجيل الدخول، لكن تعذر تحميل بيانات المتدرب الحالية.',
-  );
-
-  return;
-}
-
-/*
- * نثبت الجلسة المحلية باستخدام نفس نظام الجلسة
- * الموجود حاليًا في النظام.
- */
-const sessionUser =
-  await traineeRepository.startSession(
-    localUser.id,
-  );
- document.cookie =
+document.cookie =
   `impact_sql_trainee=${encodeURIComponent(
     traineeData.trainee.id,
   )}; Max-Age=2592000; Path=/; SameSite=Lax`;
-if (!sessionUser) {
-  setMsg(
-    'تم التحقق من الحساب، لكن تعذر إنشاء جلسة المتدرب.',
-  );
-
-  return;
-}
 
       router.push(
         next.startsWith('/')

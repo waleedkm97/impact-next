@@ -74,22 +74,33 @@ export async function POST(request: Request) {
     const passwordHash = await hashPassword(password);
 
     const trainee = await prisma.trainee.create({
-      data: {
-        id:
-          typeof body.id === 'string' && body.id.trim()
-            ? body.id.trim()
-            : `trainee-${Date.now()}-${randomBytes(5).toString('hex')}`,
+  data: {
+    id:
+      typeof body.id === 'string' && body.id.trim()
+        ? body.id.trim()
+        : `trainee-${Date.now()}-${randomBytes(5).toString('hex')}`,
 
-        firstName,
-        lastName,
-        firstNameEnglish: firstNameEnglish || null,
-        lastNameEnglish: lastNameEnglish || null,
-        email,
-        phone: phone || null,
-        passwordHash,
-        status: 'active',
-        emailVerified: true,
-      },
+    firstName,
+    lastName,
+    firstNameEnglish: firstNameEnglish || null,
+    lastNameEnglish: lastNameEnglish || null,
+    email,
+    phone: phone || null,
+    passwordHash,
+    status: 'active',
+    emailVerified: true,
+
+    preferences: {
+      gender:
+        body.gender === 'female'
+          ? 'female'
+          : body.gender === 'male'
+            ? 'male'
+            : null,
+    },
+  },
+
+
 
       select: {
         id: true,
@@ -115,7 +126,10 @@ export async function POST(request: Request) {
     return Response.json(
       {
         success: false,
-        error: 'تعذر حفظ حساب المتدرب في قاعدة البيانات.',
+       error:
+  error instanceof Error
+    ? error.message
+    : String(error),
       },
       { status: 500 },
     );
