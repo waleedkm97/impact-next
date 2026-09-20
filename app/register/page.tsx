@@ -1,207 +1,75 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
+import { useEffect, useState } from 'react';
+import { fetchCatalog } from '@/lib/public-catalog';
+import type { Course } from '@/types/course';
+import { useLocale } from '@/hooks/use-locale';
 
-export default function Register() {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [firstNameEnglish, setFirstNameEnglish] = useState('');
-  const [lastNameEnglish, setLastNameEnglish] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | ''>('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [msg, setMsg] = useState('');
-  const [running, setRunning] = useState(false);
-  const router = useRouter();
+export default function RecordedCourses() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const { isEnglish } = useLocale();
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setMsg('');
-    setRunning(true);
-
-    try {
-      // التحقق من وجود البريد يتم من قاعدة SQL داخل /api/trainees/register
-      const sqlResponse = await fetch('/api/trainees/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          firstNameEnglish: firstNameEnglish.trim(),
-          lastNameEnglish: lastNameEnglish.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          password,
-        }),
-      });
-
-      const sqlData = await sqlResponse.json().catch(() => null);
-
-      if (!sqlResponse.ok || !sqlData?.success) {
-        setMsg(
-          sqlData?.error ??
-            'تعذر حفظ الحساب في قاعدة البيانات.',
-        );
-        return;
-      }
-      await traineeRepository.create({
-        profile: {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          firstNameEnglish: firstNameEnglish.trim() || undefined,
-          lastNameEnglish: lastNameEnglish.trim() || undefined,
-          gender: gender || undefined,
-        },
-        contact: {
-          email: email.trim(),
-          phone: phone.trim(),
-        },
-        email: email.trim(),
-        passwordHash: password,
-        enrollments: [],
-        progress: [],
-        certificates: [],
-        status: 'active',
-        emailVerified: true,
-      });
-
-      const user = await traineeRepository.loginUser(email, password);
-document.cookie =
-  `impact_sql_trainee=${encodeURIComponent(
-    sqlData.trainee.id,
-  )}; Max-Age=2592000; Path=/; SameSite=Lax`;
-if (!user) {
-  setMsg('تم إنشاء الحساب، لكن تعذر تسجيل الدخول تلقائيًا.');
-  return;
-}
-
-document.cookie =
-  `impact_trainee=${encodeURIComponent(
-    sqlData.trainee.id,
-  )}; ` +
-  `Max-Age=2592000; ` +
-  `Path=/; ` +
-  `SameSite=Lax`;
-
-router.push('/account');
-    } catch {
-      setMsg('تعذر إنشاء الحساب. حاول مرة أخرى.');
-    } finally {
-      setRunning(false);
-    }
-  }
+  useEffect(() => {
+    fetchCatalog({ type: 'recorded' }).then(({ courses: catalogCourses }) => setCourses(catalogCourses));
+  }, []);
 
   return (
-    <main dir="rtl" className="auth-page">
-      <form className="auth-card" onSubmit={submit}>
-        <h1>إنشاء حساب</h1>
-        <p>أنشئ حسابك للتسجيل في الدورات ومتابعة طلباتك وشهاداتك.</p>
+    <main dir={isEnglish ? 'ltr' : 'rtl'} className="recorded-page">
+      <style jsx>{`
+        .recorded-page { background:#f5f7fa; min-height:100vh; color:#0a1931; }
+        .recorded-hero { padding:90px 24px 40px; text-align:center; background:linear-gradient(180deg,#fff 0%,#f5f7fa 100%); }
+        .recorded-hero h1 { margin:0; font-size:clamp(34px,5vw,56px); line-height:1.15; color:#0a1931; font-weight:900; }
+        .recorded-hero p { max-width:760px; margin:14px auto 0; color:#69778c; line-height:2; }
+        .recorded-grid { width:min(1180px,100%); margin:0 auto; padding:30px 24px 90px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; align-items:stretch; }
+        .recorded-card { min-height:560px; height:100%; display:flex; flex-direction:column; background:#fff; border:1px solid #e1e8ef; border-radius:22px; overflow:hidden; box-shadow:0 14px 36px rgba(10,25,49,.06); transition:transform .2s ease, box-shadow .2s ease; }
+        .recorded-card:hover { transform:translateY(-5px); box-shadow:0 20px 42px rgba(10,25,49,.10); }
+        .recorded-image { height:230px; flex:0 0 230px; background-size:cover; background-position:center; position:relative; }
+        .recorded-image::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(7,29,54,.05),rgba(7,29,54,.25)); }
+        .recorded-label { position:absolute; z-index:2; top:14px; right:14px; padding:7px 10px; background:#fff; color:#0a1931; border-radius:8px; font-size:11px; font-weight:900; }
+        .recorded-body { flex:1; display:flex; flex-direction:column; padding:24px; }
+        .recorded-body h3 { margin:0; color:#0a1931; font-size:21px; line-height:1.5; }
+        .recorded-body p { margin:14px 0 0; color:#66758a; font-size:13px; line-height:1.95; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; min-height:125px; }
+        .recorded-meta { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+        .recorded-meta span { padding:7px 9px; border-radius:8px; background:#f4f6f8; color:#607086; font-size:11px; }
+        .recorded-bottom { margin-top:auto; padding-top:18px; border-top:1px solid #edf0f3; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+        .recorded-price { color:#0a1931; font-size:19px; font-weight:900; }
+        .recorded-button { padding:11px 16px; border-radius:10px; background:#b58a3a; color:#fff; text-decoration:none; font-size:12px; font-weight:900; }
+        @media(max-width:900px){.recorded-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        @media(max-width:600px){.recorded-grid{grid-template-columns:1fr;padding:20px 18px 60px}.recorded-hero{padding:70px 18px 30px}}
+      `}</style>
 
-        <div className="auth-form-grid">
-          <label>
-            الاسم الأول
-            <input
-              required
-              value={firstName}
-              onChange={(event) => setFirstName(event.target.value)}
-            />
-          </label>
+      <section className="recorded-hero">
+        <h1>{isEnglish ? 'Learn on your time, build skills with confidence' : 'تعلّم في وقتك، وطور مهاراتك بثقة'}</h1>
+        <p>{isEnglish ? 'Recorded courses you can access and learn from whenever it suits you.' : 'دورات مسجلة يمكنك الوصول إليها والتعلم منها في الوقت المناسب لك.'}</p>
+      </section>
 
-          <label>
-            اسم العائلة
-            <input
-              required
-              value={lastName}
-              onChange={(event) => setLastName(event.target.value)}
-            />
-          </label>
-        </div>
-
-        <div className="auth-form-grid">
-          <label>
-            الاسم الأول بالإنجليزي
-            <input
-              value={firstNameEnglish}
-              onChange={(event) => setFirstNameEnglish(event.target.value)}
-              dir="ltr"
-              placeholder="First Name"
-            />
-          </label>
-
-          <label>
-            اسم العائلة بالإنجليزي
-            <input
-              value={lastNameEnglish}
-              onChange={(event) => setLastNameEnglish(event.target.value)}
-              dir="ltr"
-              placeholder="Last Name"
-            />
-          </label>
-        </div>
-
-        <label>
-          الجنس
-          <select
-            required
-            value={gender}
-            onChange={(event) =>
-              setGender(event.target.value as 'male' | 'female' | '')
-            }
-          >
-            <option value="">اختر الجنس</option>
-            <option value="male">ذكر</option>
-            <option value="female">أنثى</option>
-          </select>
-        </label>
-
-        <label>
-          البريد الإلكتروني
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-          />
-        </label>
-
-        <label>
-          رقم الجوال
-          <input
-            required
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-          />
-        </label>
-
-        <label>
-          كلمة المرور
-          <input
-            type="password"
-            required
-            minLength={6}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="new-password"
-          />
-        </label>
-
-        {msg && <div className="auth-error">{msg}</div>}
-
-        <button type="submit" disabled={running}>
-          {running ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
-        </button>
-
-        <p className="auth-register">
-          لديك حساب؟ <Link href="/login">تسجيل الدخول</Link>
-        </p>
-      </form>
+      <section className="recorded-grid">
+        {courses.map((course) => {
+          const description = course.shortDescription || course.description || (isEnglish ? 'A practical recorded learning experience designed for flexible professional development.' : 'دورة تدريبية مسجلة مصممة لتطوير المهارات من خلال تجربة تعلم مرنة وعملية.');
+          return (
+            <article key={course.id} className="recorded-card">
+              <div className="recorded-image" style={{ backgroundImage: `url(${course.image || course.thumbnail || ''})` }}>
+                <span className="recorded-label">{isEnglish ? 'Recorded course' : 'دورة مسجلة'}</span>
+              </div>
+              <div className="recorded-body">
+                <h3>{course.title}</h3>
+                <p>{description}</p>
+                <div className="recorded-meta">
+                  {course.hours ? <span>{course.hours} {isEnglish ? 'hours' : 'ساعة'}</span> : null}
+                  {course.days ? <span>{course.days} {isEnglish ? 'days' : 'أيام'}</span> : null}
+                  <span>{isEnglish ? 'Self-paced' : 'تعلم ذاتي'}</span>
+                </div>
+                <div className="recorded-bottom">
+                  <strong className="recorded-price">{course.price ? `${Number(course.price).toLocaleString(isEnglish ? 'en-US' : 'ar-SA')} ${isEnglish ? 'SAR' : 'ر.س'}` : (isEnglish ? 'Contact us' : 'تواصل معنا')}</strong>
+                  <Link href={`/course-details?id=${course.id}`} className="recorded-button">{isEnglish ? 'View details' : 'عرض التفاصيل'}</Link>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+        {!courses.length && <p>{isEnglish ? 'No recorded courses are currently published.' : 'لا توجد دورات مسجلة منشورة حاليًا.'}</p>}
+      </section>
     </main>
   );
 }

@@ -1,1094 +1,1105 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { fetchCatalog } from '@/lib/public-catalog';
 import type { Course } from '@/types/course';
 import { useLocale } from '@/hooks/use-locale';
+import HomeCarousel from '@/components/ui/HomeCarousel';
+
+const SATISFACTION_RATE = 95;
+const TRAINER_COUNT = 3000;
 
 export default function HomePage() {
   const { isEnglish } = useLocale();
   const [courses, setCourses] = useState<Course[]>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; image?: string | null; description?: string | null }>>([]);
+  const [categories, setCategories] = useState<
+    Array<{ id: string; name: string; description?: string | null }>
+  >([]);
   const [totalCourseCount, setTotalCourseCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadCourses() {
+    async function loadCatalog() {
       try {
         const catalog = await fetchCatalog({ featured: true });
-        const publishedCourses = catalog.courses;
+        if (!mounted) return;
 
-        if (mounted) {
-          setCourses(publishedCourses);
-          setCategories(catalog.categories.map((category) => ({ id: category.id, name: category.name, image: category.image, description: category.description })));
-          setTotalCourseCount(catalog.totalCount);
-        }
+        setCourses(catalog.courses);
+        setCategories(
+          catalog.categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            description: category.description,
+          })),
+        );
+        setTotalCourseCount(catalog.totalCount);
       } catch (error) {
-        console.error('Failed to load homepage courses:', error);
+        console.error('Failed to load homepage catalog:', error);
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     }
 
-    loadCourses();
-
+    loadCatalog();
     return () => {
       mounted = false;
     };
   }, []);
 
-  const recordedCourses = useMemo(
+  const featuredCourses = useMemo(
     () =>
-      courses
-        .filter((course) => course.type === 'recorded')
-        .sort(
-          (a, b) =>
-            Number(b.featured) - Number(a.featured) ||
-            b.createdAt.getTime() - a.createdAt.getTime()
-        )
-        .slice(0, 6),
-    [courses]
+      [...courses].sort(
+        (a, b) =>
+          Number(b.featured) - Number(a.featured) ||
+          b.createdAt.getTime() - a.createdAt.getTime(),
+      ),
+    [courses],
   );
-
-  const trainingCourses = useMemo(
-    () =>
-      courses
-        .filter(
-          (course) =>
-            course.type === 'training' &&
-            course.trainingKind === 'public'
-        )
-        .sort(
-          (a, b) =>
-            Number(b.featured) - Number(a.featured) ||
-            b.createdAt.getTime() - a.createdAt.getTime()
-        )
-        .slice(0, 6),
-    [courses]
-  );
-
-  const totalPublished = totalCourseCount;
-  const categoryCards = categories
-    .filter((category) => courses.some((course) => course.categoryId === category.id))
-    .slice(0, 8);
 
   return (
-    <main dir="rtl" className="homepage">
-      <style jsx>{`
-        .homepage {
-          background: #ffffff;
-          color: #0B2E67
-        }
-
-        .section {
-          padding: 82px 24px;
-        }
-
-        .section-inner {
-          width: min(1180px, 100%);
-          margin: 0 auto;
-        }
-
-        .hero {
-          position: relative;
+    <main dir={isEnglish ? 'ltr' : 'rtl'} className="impact-home-final">
+      <style jsx global>{`
+        /* ===============================
+           IMPACT HOMEPAGE FINAL VISUAL SYSTEM
+           =============================== */
+        .impact-home-final {
+          --navy: #071d36;
+          --navy-2: #0b2748;
+          --navy-3: #153e6c;
+          --gold: #b58a3a;
+          --gold-light: #ead3a0;
+          --ink: #0b2545;
+          --muted: #6b778b;
+          --soft: #f4f6f8;
+          --line: #e5e9ef;
+          background: #fff;
+          color: var(--ink);
           overflow: hidden;
+        }
+
+        /* ===== NAVBAR: HOMEPAGE MERGES INTO HERO ===== */
+        .navbar.navbar-home {
+          position: absolute !important;
+          inset: 0 0 auto 0 !important;
+          width: 100% !important;
+          z-index: 100 !important;
+          background: rgba(7, 29, 54, 0.22) !important;
+          border-bottom: 1px solid rgba(255,255,255,.16) !important;
+          box-shadow: none !important;
+          backdrop-filter: blur(5px) !important;
+          -webkit-backdrop-filter: blur(5px) !important;
+        }
+
+        .navbar.navbar-home .nav-container {
+          height: 82px !important;
+        }
+
+        .navbar.navbar-home .nav-links a,
+        .navbar.navbar-home .nav-services-trigger,
+        .navbar.navbar-home .nav-language,
+        .navbar.navbar-home .nav-search {
+          color: #fff !important;
+        }
+
+        .navbar.navbar-home .nav-links a:hover,
+        .navbar.navbar-home .nav-services-trigger:hover,
+        .navbar.navbar-home .nav-links a[aria-current='page'] {
+          color: #e3bf72 !important;
+          background: rgba(255,255,255,.08) !important;
+        }
+
+        .navbar.navbar-home .nav-login {
+          background: #b58a3a !important;
+          color: #fff !important;
+          border: 1px solid rgba(255,255,255,.12) !important;
+          box-shadow: 0 8px 22px rgba(0,0,0,.18) !important;
+        }
+
+        .navbar.navbar-home .nav-search {
+          background: rgba(255,255,255,.10) !important;
+          border: 1px solid rgba(255,255,255,.18) !important;
+        }
+
+        .navbar.navbar-home .nav-language {
+          background: transparent !important;
+          border: 0 !important;
+          width: 38px !important;
+          min-width: 38px !important;
+          height: 38px !important;
+          padding: 0 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 50% !important;
+        }
+
+        /* ===== HERO ===== */
+        .impact-home-final .hero {
+          position: relative;
+          min-height: 575px;
+          height: 575px;
+          overflow: hidden;
+          background: var(--navy);
+          isolation: isolate;
+        }
+
+        .impact-home-final .hero::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          z-index: 0;
           background:
-            radial-gradient(
-              circle at 12% 20%,
-              rgba(162, 115, 48, 0.12),
-              transparent 30%
-            ),
-            linear-gradient(135deg, #F7F9FC 0%, #ffffff 55%, #F2F6FA 100%);
-          min-height: 610px;
-          display: flex;
-          align-items: center;
+            linear-gradient(90deg,
+              rgba(7,29,54,.98) 0%,
+              rgba(7,29,54,.90) 22%,
+              rgba(7,29,54,.62) 45%,
+              rgba(7,29,54,.18) 70%,
+              rgba(7,29,54,.02) 100%),
+            url('/assets/hero/riyadh-hero.png') center right / cover no-repeat;
         }
 
-        .hero-inner {
-          width: min(1180px, 100%);
-          margin: 0 auto;
-          padding: 80px 24px;
-          display: grid;
-          grid-template-columns: 1.1fr 0.9fr;
-          gap: 70px;
-          align-items: center;
-        }
-
-        .eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          color: #B58A3A;
-          font-size: 14px;
-          font-weight: 800;
-          letter-spacing: 0.5px;
-          margin-bottom: 18px;
-        }
-
-        .eyebrow::before {
-          content: '';
-          width: 28px;
-          height: 2px;
-          background: #B58A3A;
-        }
-
-        .hero h1 {
-          margin: 0;
-          max-width: 700px;
-          font-size: clamp(40px, 5vw, 66px);
-          line-height: 1.12;
-          font-weight: 900;
-          letter-spacing: -1.5px;
-          color: #0B2E67;
-        }
-
-        .hero h1 span {
-          color: #B58A3A;
-        }
-
-        .hero-text {
-          max-width: 650px;
-          margin: 26px 0 0;
-          font-size: 19px;
-          line-height: 2;
-          color: #667085;
-        }
-
-        .hero-actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 14px;
-          margin-top: 34px;
-        }
-
-        .btn-primary,
-        .btn-secondary {
-          display: inline-flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 50px;
-          padding: 0 25px;
-          border-radius: 10px;
-          text-decoration: none;
-          font-size: 15px;
-          font-weight: 800;
-          transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease,
-            background 0.2s ease;
-        }
-
-        .btn-primary {
-          background: #0B2E67;
-          color: #ffffff;
-          box-shadow: 0 10px 24px rgba(39, 49, 61, 0.16);
-        }
-
-        .btn-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 14px 28px rgba(39, 49, 61, 0.2);
-        }
-
-        .btn-secondary {
-          border: 1px solid #D7DFEA;
-          background: #ffffff;
-          color: #0B2E67;
-        }
-
-        .btn-secondary:hover {
-          transform: translateY(-2px);
-          border-color: #B58A3A;
-        }
-
-        .hero-visual {
-          position: relative;
-          min-height: 410px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .hero-logo-card {
-          position: relative;
-          width: min(440px, 100%);
-          min-height: 340px;
-          border-radius: 28px;
-          background: #0B2E67;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 45px;
-          box-shadow: 0 28px 70px rgba(39, 49, 61, 0.2);
-          overflow: hidden;
-        }
-
-        .hero-logo-card::before {
+        .impact-home-final .hero::after {
           content: '';
           position: absolute;
-          width: 280px;
-          height: 280px;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 50%;
-          top: -120px;
-          left: -100px;
+          inset: 0;
+          z-index: 0;
+          background:
+            linear-gradient(180deg, rgba(7,29,54,.04) 0%, rgba(7,29,54,.02) 58%, rgba(7,29,54,.32) 100%);
+          pointer-events: none;
         }
 
-        .hero-logo-card::after {
-          content: '';
-          position: absolute;
-          width: 220px;
-          height: 220px;
-          border: 1px solid rgba(162, 115, 48, 0.4);
-          border-radius: 50%;
-          bottom: -100px;
-          right: -80px;
-        }
-
-        .hero-logo {
-          position: relative;
-          z-index: 1;
-          width: 230px;
-          height: auto;
-          object-fit: contain;
-        }
-
-        .hero-card-title {
-          position: relative;
-          z-index: 1;
-          margin: 28px 0 0;
-          color: #ffffff;
-          font-size: 20px;
-          font-weight: 800;
-          text-align: center;
-        }
-
-        .hero-card-subtitle {
-          position: relative;
-          z-index: 1;
-          margin: 10px 0 0;
-          color: rgba(255, 255, 255, 0.72);
-          font-size: 14px;
-          text-align: center;
-        }
-
-        .stats {
-          margin-top: -34px;
+        .impact-home-final .hero-inner {
           position: relative;
           z-index: 2;
-          padding: 0 24px 25px;
-        }
-
-        .stats-inner {
-          width: min(1000px, 100%);
+          width: min(1280px, calc(100% - 64px));
+          height: 100%;
           margin: 0 auto;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          background: #ffffff;
-          border-radius: 18px;
-          box-shadow: 0 16px 45px rgba(39, 49, 61, 0.1);
-          overflow: hidden;
+          grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+          align-items: center;
+          gap: 40px;
+          direction: ltr;
         }
 
-        .stat {
-          padding: 25px;
-          text-align: center;
-          border-left: 1px solid #E7ECF3;
+        .impact-home-final .hero-copy {
+          direction: rtl;
+          color: #fff;
+          max-width: 700px;
+          padding-top: 40px;
+          padding-bottom: 28px;
         }
 
-        .stat:last-child {
-          border-left: 0;
-        }
-
-        .stat strong {
-          display: block;
-          color: #0B2E67;
-          font-size: 30px;
-          font-weight: 900;
-        }
-
-        .stat span {
-          display: block;
-          margin-top: 5px;
-          color: #7A8496;
+        .impact-home-final .eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          color: #ddb25f;
           font-size: 13px;
+          font-weight: 900;
+          letter-spacing: .7px;
+          margin-bottom: 16px;
         }
 
-        .section-header {
-          margin-bottom: 38px;
-          display: flex;
-          justify-content: space-between;
-          align-items: end;
-          gap: 30px;
+        .impact-home-final .eyebrow::before {
+          content: '';
+          width: 34px;
+          height: 2px;
+          background: #ddb25f;
+          border-radius: 99px;
         }
 
-        .section-header h2 {
+        .impact-home-final .hero h1 {
           margin: 0;
-          font-size: clamp(28px, 4vw, 40px);
-          line-height: 1.25;
-          color: #0B2E67;
+          max-width: 650px;
+          color: #fff;
+          font-size: clamp(42px, 5.5vw, 76px);
+          line-height: 1.08;
+          font-weight: 900;
+          letter-spacing: -1.8px;
+          text-wrap: balance;
         }
 
-        .section-header p {
-          max-width: 520px;
-          margin: 10px 0 0;
-          color: #667085;
+        .impact-home-final .hero h1 span {
+          color: #ddb25f;
+        }
+
+        .impact-home-final .hero-text {
+          max-width: 660px;
+          margin: 22px 0 0;
+          color: rgba(255,255,255,.86);
+          font-size: 18px;
           line-height: 1.9;
         }
 
-        .section-link {
-          flex-shrink: 0;
-          color: #B58A3A;
-          font-size: 14px;
-          font-weight: 800;
-          text-decoration: none;
-        }
-
-        .section-link:hover {
-          text-decoration: underline;
-        }
-
-        .courses-section {
-          background: #ffffff;
-        }
-
-        .course-grid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 22px;
-        }
-
-        .course-card {
-          overflow: hidden;
-          background: #ffffff;
-          border: 1px solid #E7ECF3;
-          border-radius: 16px;
-          box-shadow: 0 8px 28px rgba(39, 49, 61, 0.05);
-          transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease;
-        }
-
-        .course-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 16px 35px rgba(39, 49, 61, 0.1);
-        }
-
-        .course-image {
-          height: 165px;
-          background:
-            linear-gradient(
-              135deg,
-              rgba(59, 41, 50, 0.98),
-              rgba(80, 59, 69, 0.92)
-            );
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .course-image::before {
-          content: '';
-          position: absolute;
-          width: 190px;
-          height: 190px;
-          border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .course-image-label {
-          position: relative;
-          z-index: 1;
-          padding: 8px 13px;
-          border-radius: 30px;
-          background: rgba(255, 255, 255, 0.12);
-          color: #ffffff;
-          font-size: 12px;
-          font-weight: 700;
-          backdrop-filter: blur(4px);
-        }
-
-        .course-body {
-          padding: 22px;
-        }
-
-        .course-type {
-          color: #B58A3A;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .course-title {
-          margin: 9px 0 10px;
-          color: #0B2E67;
-          font-size: 19px;
-          line-height: 1.55;
-          font-weight: 850;
-        }
-
-        .course-description {
-          min-height: 48px;
-          margin: 0;
-          color: #667085;
-          font-size: 13px;
-          line-height: 1.8;
-        }
-
-        .course-meta {
+        .impact-home-final .hero-actions {
           display: flex;
           flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 17px;
-        }
-
-        .course-meta span {
-          padding: 6px 9px;
-          border-radius: 7px;
-          background: #F6F8FB;
-          color: #5D687A;
-          font-size: 11px;
-        }
-
-        .course-footer {
-          margin-top: 20px;
-          padding-top: 16px;
-          border-top: 1px solid #E7ECF3;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
           gap: 12px;
-        }
-
-        .course-price {
-          color: #0B2E67;
-          font-size: 17px;
-          font-weight: 900;
-        }
-
-        .course-price small {
-          display: block;
-          margin-bottom: 2px;
-          color: #8A94A6;
-          font-size: 10px;
-          font-weight: 500;
-        }
-
-        .course-button {
-          color: #B58A3A;
-          font-size: 13px;
-          font-weight: 800;
-          text-decoration: none;
-        }
-
-        .course-button:hover {
-          text-decoration: underline;
-        }
-
-        .empty-state {
-          padding: 50px 25px;
-          text-align: center;
-          border: 1px dashed #D7DFEA;
-          border-radius: 16px;
-          color: #7A8496;
-          grid-column: 1 / -1;
-        }
-
-        .services-section {
-          background: #F6F8FB;
-        }
-
-        .services-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 18px;
-        }
-
-        .service-card {
-          background: #ffffff;
-          border: 1px solid #E7ECF3;
-          border-radius: 14px;
-          padding: 28px 22px;
-        }
-
-        .service-number {
-          color: #B58A3A;
-          font-size: 12px;
-          font-weight: 900;
-        }
-
-        .service-card h3 {
-          margin: 18px 0 10px;
-          font-size: 18px;
-          color: #0B2E67;
-        }
-
-        .service-card p {
-          margin: 0;
-          color: #667085;
-          font-size: 13px;
-          line-height: 1.9;
-        }
-
-        .why-section {
-          background: #ffffff;
-        }
-
-        .why-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 65px;
-          align-items: center;
-        }
-
-        .why-copy h2 {
-          margin: 0;
-          color: #0B2E67;
-          font-size: clamp(30px, 4vw, 44px);
-          line-height: 1.3;
-        }
-
-        .why-copy > p {
-          margin: 20px 0 0;
-          color: #667085;
-          line-height: 2;
-        }
-
-        .benefits {
-          display: grid;
-          gap: 13px;
           margin-top: 28px;
         }
 
-        .benefit {
-          display: flex;
-          align-items: flex-start;
-          gap: 13px;
-          padding: 14px 0;
-          border-bottom: 1px solid #E7ECF3;
-        }
-
-        .benefit-mark {
-          flex-shrink: 0;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          background: #EEF2F7;
-          color: #B58A3A;
-          display: flex;
+        .impact-home-final .hero-actions a {
+          min-height: 52px;
+          padding: 0 25px;
+          border-radius: 12px;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-size: 13px;
-          font-weight: 900;
-        }
-
-        .benefit strong {
-          display: block;
-          color: #0B2E67;
           font-size: 14px;
+          font-weight: 900;
+          text-decoration: none;
+          transition: .2s ease;
         }
 
-        .benefit span {
-          display: block;
-          margin-top: 4px;
-          color: #7A8496;
-          font-size: 12px;
+        .impact-home-final .hero-primary {
+          background: var(--gold);
+          color: #fff;
+          box-shadow: 0 12px 24px rgba(0,0,0,.16);
         }
 
-        .why-panel {
-          min-height: 390px;
-          padding: 42px;
-          border-radius: 24px;
-          background: #0B2E67;
-          color: #ffffff;
+        .impact-home-final .hero-primary:hover {
+          transform: translateY(-2px);
+          background: #c39a4a;
+        }
+
+        .impact-home-final .hero-secondary {
+          color: #fff;
+          background: transparent;
+          border: 1px solid rgba(255,255,255,.42);
+        }
+
+        .impact-home-final .hero-secondary:hover {
+          transform: translateY(-2px);
+          border-color: #fff;
+          background: rgba(255,255,255,.08);
+        }
+
+        /* Deliberately empty: the image is the full hero background. */
+        .impact-home-final .hero-visual {
+          display: none;
+        }
+
+        /* ===== STATS: SEPARATE WHITE FLOATING PANEL ===== */
+        .impact-home-final .stats-wrap {
+          position: relative;
+          z-index: 5;
+          margin-top: -40px;
+          padding: 0 24px;
+        }
+
+        .impact-home-final .stats-card {
+          width: min(1080px, 100%);
+          margin: 0 auto;
+          min-height: 155px;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          background: #fff;
+          border: 1px solid #e4e8ef;
+          border-radius: 20px;
+          box-shadow: 0 18px 50px rgba(7,29,54,.14);
+          overflow: hidden;
+        }
+
+        .impact-home-final .stat {
+          min-height: 155px;
           display: flex;
           flex-direction: column;
           justify-content: center;
-          box-shadow: 0 25px 55px rgba(39, 49, 61, 0.16);
+          align-items: center;
+          text-align: center;
+          padding: 24px;
+          position: relative;
         }
 
-        .why-panel small {
-          color: #D8B56A;
-          font-weight: 800;
+        .impact-home-final .stat + .stat {
+          border-inline-start: 1px solid #e6eaf0;
         }
 
-        .why-panel h3 {
-  margin: 15px 0;
-  font-size: 30px;
-  line-height: 1.4;
-  color: #ffffff;
-}
+        .impact-home-final .stat-icon {
+          width: 44px;
+          height: 44px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: #f8f2e8;
+          color: var(--gold);
+          margin-bottom: 10px;
+        }
 
-        .why-panel p {
+        .impact-home-final .stat-icon svg {
+          width: 22px;
+          height: 22px;
+          display: block;
+        }
+
+        .impact-home-final .stat strong {
+          color: var(--ink);
+          font-size: 32px;
+          font-weight: 900;
+          line-height: 1;
+        }
+
+        .impact-home-final .stat-label {
+          margin-top: 8px;
+          color: #7a8799;
+          font-size: 13px;
+        }
+
+        /* ===== TOPICS ===== */
+        .impact-home-final .topics-section {
+          background: #fff;
+          padding: 88px 24px 58px;
+        }
+
+        .impact-home-final .section-inner {
+          width: min(1220px, 100%);
+          margin: 0 auto;
+        }
+
+        .impact-home-final .section-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          gap: 24px;
+          margin-bottom: 30px;
+        }
+
+        .impact-home-final .section-head h2 {
           margin: 0;
-          color: rgba(255, 255, 255, 0.72);
+          color: var(--ink);
+          font-size: clamp(30px, 4vw, 48px);
+          line-height: 1.15;
+          font-weight: 900;
+        }
+
+        .impact-home-final .section-head p {
+          margin: 10px 0 0;
+          color: var(--muted);
+          line-height: 1.8;
+        }
+
+        .impact-home-final .section-link {
+          flex-shrink: 0;
+          color: var(--gold);
+          font-size: 14px;
+          font-weight: 900;
+          text-decoration: none;
+        }
+
+        .impact-home-final .home-category-card-final {
+          height: 150px;
+          min-height: 150px;
+          width: 100%;
+          box-sizing: border-box;
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          align-items: flex-start;
+          color: #fff !important;
+          background: linear-gradient(145deg, #0a2748, #123c69) !important;
+          border: 1px solid rgba(181,138,58,.55) !important;
+          border-radius: 18px !important;
+          text-decoration: none !important;
+          box-shadow: 0 10px 24px rgba(7,29,54,.09) !important;
+          transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+        }
+
+        .impact-home-final .home-category-card-final:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 18px 30px rgba(7,29,54,.14) !important;
+          border-color: #ddb25f !important;
+        }
+
+        .impact-home-final .topic-index {
+          color: #ddb25f;
+          font-size: 12px;
+          font-weight: 900;
+          line-height: 1;
+        }
+
+        .impact-home-final .topic-title {
+          color: #fff;
+          font-size: 18px;
+          line-height: 1.4;
+          font-weight: 900;
+        }
+
+        .impact-home-final .topic-arrow {
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: #f6ead1;
+          color: var(--navy);
+          font-size: 18px;
+          font-weight: 900;
+        }
+
+        /* ===== COURSES ===== */
+        .impact-home-final .courses-section {
+          background: var(--soft);
+          padding: 78px 24px 88px;
+        }
+
+        .impact-home-final .course-card-final {
+          height: 420px;
+          min-height: 420px;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          background: #fff;
+          border: 1px solid #e2e7ed;
+          border-radius: 18px;
+          box-shadow: 0 10px 28px rgba(7,29,54,.06);
+          transition: transform .2s ease, box-shadow .2s ease;
+        }
+
+        .impact-home-final .course-card-final:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 18px 34px rgba(7,29,54,.12);
+        }
+
+        .impact-home-final .course-thumb {
+          height: 170px;
+          min-height: 170px;
+          background-size: cover;
+          background-position: center;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .impact-home-final .course-thumb::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(180deg, rgba(7,29,54,0) 48%, rgba(7,29,54,.26) 100%);
+        }
+
+        .impact-home-final .course-badge {
+          position: absolute;
+          z-index: 2;
+          top: 12px;
+          inset-inline-end: 12px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: rgba(255,255,255,.92);
+          color: var(--ink);
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        .impact-home-final .course-body-final {
+          flex: 1;
+          min-height: 0;
+          padding: 17px 18px 16px;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .impact-home-final .course-kicker {
+          color: var(--gold);
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        .impact-home-final .course-title-final {
+          margin: 7px 0 8px;
+          min-height: 48px;
+          color: var(--ink);
+          font-size: 17px;
+          line-height: 1.45;
+          font-weight: 900;
+        }
+
+        .impact-home-final .course-desc-final {
+          min-height: 50px;
+          margin: 0;
+          color: #677487;
+          font-size: 12.5px;
+          line-height: 1.75;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+        }
+
+        .impact-home-final .course-meta-final {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 7px;
+          margin-top: auto;
+          padding-top: 14px;
+        }
+
+        .impact-home-final .course-meta-final span {
+          padding: 6px 8px;
+          border-radius: 7px;
+          background: #f6f8fb;
+          color: #667388;
+          font-size: 10px;
+        }
+
+        .impact-home-final .course-foot-final {
+          margin-top: 13px;
+          padding-top: 12px;
+          border-top: 1px solid #edf0f4;
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .impact-home-final .course-button-final {
+          color: var(--ink);
+          font-size: 13px;
+          font-weight: 900;
+          text-decoration: none;
+        }
+
+        .impact-home-final .course-button-final:hover {
+          color: var(--gold);
+        }
+
+        /* ===== SERVICES ===== */
+        .impact-home-final .services-section {
+          background: #fff;
+          padding: 84px 24px;
+        }
+
+        .impact-home-final .services-grid-final {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0,1fr));
+          gap: 18px;
+        }
+
+        .impact-home-final .service-card-final {
+          min-height: 215px;
+          padding: 24px;
+          background: #fff;
+          border: 1px solid #e1e7ee;
+          border-radius: 18px;
+          box-shadow: 0 8px 24px rgba(7,29,54,.05);
+          transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+        }
+
+        .impact-home-final .service-card-final:hover {
+          transform: translateY(-4px);
+          border-color: #d8bc81;
+          box-shadow: 0 16px 30px rgba(7,29,54,.09);
+        }
+
+        .impact-home-final .service-number {
+          color: var(--gold);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .impact-home-final .service-card-final h3 {
+          margin: 18px 0 9px;
+          color: var(--ink);
+          font-size: 19px;
+          line-height: 1.4;
+          font-weight: 900;
+        }
+
+        .impact-home-final .service-card-final p {
+          margin: 0;
+          color: var(--muted);
+          line-height: 1.9;
+          font-size: 13px;
+        }
+
+        /* ===== CORPORATE CTA ===== */
+        .impact-home-final .why-section {
+          background: var(--soft);
+          padding: 84px 24px;
+        }
+
+        .impact-home-final .why-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+          gap: 60px;
+          align-items: center;
+        }
+
+        .impact-home-final .why-copy h2 {
+          margin: 0;
+          color: var(--ink);
+          font-size: clamp(32px, 4vw, 52px);
+          line-height: 1.18;
+          font-weight: 900;
+        }
+
+        .impact-home-final .why-copy > p {
+          margin: 18px 0 0;
+          color: var(--muted);
+          line-height: 2;
+        }
+
+        .impact-home-final .benefits-final {
+          display: grid;
+          gap: 14px;
+          margin-top: 26px;
+        }
+
+        .impact-home-final .benefit-final {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding-bottom: 14px;
+          border-bottom: 1px solid #e0e6ed;
+        }
+
+        .impact-home-final .benefit-mark {
+          width: 30px;
+          height: 30px;
+          flex: 0 0 30px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: #f8f2e8;
+          color: var(--gold);
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        .impact-home-final .benefit-final strong {
+          display: block;
+          color: var(--ink);
+          font-size: 14px;
+        }
+
+        .impact-home-final .benefit-final span {
+          display: block;
+          margin-top: 4px;
+          color: var(--muted);
+          font-size: 12px;
+        }
+
+        .impact-home-final .why-panel-final {
+          min-height: 360px;
+          padding: 36px;
+          border-radius: 24px;
+          background: linear-gradient(145deg, var(--navy), var(--navy-3));
+          color: #fff;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          box-shadow: 0 22px 50px rgba(7,29,54,.16);
+        }
+
+        .impact-home-final .why-panel-final small {
+          color: #ddb25f;
+          font-weight: 900;
+        }
+
+        .impact-home-final .why-panel-final h3 {
+          margin: 15px 0;
+          color: #fff;
+          font-size: 31px;
+          line-height: 1.4;
+        }
+
+        .impact-home-final .why-panel-final p {
+          margin: 0;
+          color: rgba(255,255,255,.76);
           line-height: 2;
           font-size: 14px;
         }
 
-        .cta-section {
-          padding-top: 30px;
-          padding-bottom: 90px;
+        .impact-home-final .cta-section {
+          padding: 40px 24px 90px;
+          background: #fff;
         }
 
-        .cta-box {
-          padding: 55px;
+        .impact-home-final .cta-box-final {
+          min-height: 220px;
+          padding: 36px 44px;
           border-radius: 24px;
-          background:
-            linear-gradient(
-              135deg,
-              #0B2E67 0%,
-              #163F80 60%,
-              #1E4A8F 100%
-            );
-          color: #ffffff;
+          background: linear-gradient(135deg, var(--navy), var(--navy-3));
+          color: #fff;
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          gap: 40px;
+          justify-content: space-between;
+          gap: 36px;
         }
 
-        .cta-box h2 {
+        .impact-home-final .cta-box-final h2 {
           margin: 0;
-          font-size: clamp(25px, 3vw, 36px);
+          font-size: clamp(25px, 3vw, 38px);
+          line-height: 1.25;
         }
 
-        .cta-box p {
-          max-width: 650px;
+        .impact-home-final .cta-box-final p {
           margin: 12px 0 0;
-          color: rgba(255, 255, 255, 0.72);
+          max-width: 700px;
+          color: rgba(255,255,255,.72);
           line-height: 1.9;
         }
 
-        .cta-button {
-          flex-shrink: 0;
+        .impact-home-final .cta-button-final {
+          min-height: 52px;
+          padding: 0 26px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-height: 52px;
-          padding: 0 27px;
-          border-radius: 10px;
-          background: #ffffff;
-          color: #0B2E67;
+          flex-shrink: 0;
+          border-radius: 11px;
+          background: #fff;
+          color: var(--ink);
           text-decoration: none;
           font-size: 14px;
           font-weight: 900;
         }
 
-        .loading {
-          min-height: 260px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #7A8496;
-          grid-column: 1 / -1;
+        /* ===== HOME CAROUSEL PRESENTATION ===== */
+        .impact-home-final .home-carousel {
+          position: relative;
+          width: 100%;
         }
 
-        @media (max-width: 900px) {
-          .hero-inner,
-          .why-grid {
+        .impact-home-final .home-carousel-viewport {
+          width: 100%;
+          overflow: visible;
+        }
+
+        .impact-home-final .home-carousel-track {
+          display: grid !important;
+          grid-template-columns: repeat(var(--per-view), minmax(0, 1fr)) !important;
+          gap: 18px !important;
+          width: 100% !important;
+          align-items: stretch !important;
+        }
+
+        .impact-home-final .home-carousel-item {
+          min-width: 0 !important;
+          width: 100% !important;
+          display: flex !important;
+        }
+
+        .impact-home-final .home-carousel-item > * {
+          width: 100% !important;
+        }
+
+        .impact-home-final .home-carousel-arrow {
+          width: 42px !important;
+          height: 42px !important;
+          border: 1px solid #dfe5ec !important;
+          background: #fff !important;
+          color: var(--ink) !important;
+          box-shadow: 0 8px 18px rgba(7,29,54,.08) !important;
+          border-radius: 50% !important;
+          display: grid !important;
+          place-items: center !important;
+          font-size: 23px !important;
+          z-index: 10 !important;
+        }
+
+        .impact-home-final .home-carousel-arrow:disabled {
+          opacity: .36;
+          cursor: not-allowed;
+        }
+
+        .impact-home-final .home-carousel-arrow:hover:not(:disabled) {
+          border-color: #d8bc81 !important;
+          color: var(--gold) !important;
+        }
+
+        @media (max-width: 1050px) {
+          .impact-home-final .hero-inner {
+            width: min(100% - 40px, 920px);
             grid-template-columns: 1fr;
           }
 
-          .hero {
-            min-height: auto;
+          .impact-home-final .hero-copy {
+            width: min(760px, 100%);
+            padding-inline: 26px;
           }
 
-          .hero-inner {
-            padding-top: 65px;
-            padding-bottom: 75px;
-            gap: 45px;
+          .impact-home-final .hero::before {
+            background:
+              linear-gradient(90deg, rgba(7,29,54,.93), rgba(7,29,54,.66) 55%, rgba(7,29,54,.20)),
+              url('/assets/hero/riyadh-hero.png') center right / cover no-repeat;
           }
 
-          .hero-copy {
+          .impact-home-final .services-grid-final {
+            grid-template-columns: repeat(2, minmax(0,1fr));
+          }
+        }
+
+        @media (max-width: 720px) {
+          .impact-home-final .hero,
+          .impact-home-final .hero-inner {
+            min-height: 610px;
+            height: 610px;
+          }
+
+          .impact-home-final .hero-inner {
+            width: min(100% - 28px, 620px);
+          }
+
+          .impact-home-final .hero-copy {
+            padding-top: 95px;
             text-align: center;
+            align-items: center;
           }
 
-          .hero h1,
-          .hero-text {
-            margin-left: auto;
-            margin-right: auto;
+          .impact-home-final .hero h1 {
+            font-size: 44px;
           }
 
-          .hero-actions {
+          .impact-home-final .hero-text {
+            font-size: 15px;
+          }
+
+          .impact-home-final .hero-actions {
             justify-content: center;
           }
 
-          .course-grid {
-            grid-template-columns: repeat(2, 1fr);
+          .impact-home-final .stats-wrap {
+            margin-top: -25px;
           }
 
-          .services-grid {
-            grid-template-columns: repeat(2, 1fr);
+          .impact-home-final .stats-card {
+            grid-template-columns: 1fr;
+            min-height: 0;
           }
 
-          .section-header {
-            align-items: flex-start;
+          .impact-home-final .stat {
+            min-height: 125px;
+          }
+
+          .impact-home-final .stat + .stat {
+            border-inline-start: 0;
+            border-top: 1px solid #e6eaf0;
+          }
+
+          .impact-home-final .section-head {
             flex-direction: column;
-          }
-
-          .cta-box {
             align-items: flex-start;
-            flex-direction: column;
-          }
-        }
-
-        @media (max-width: 600px) {
-          .section {
-            padding: 60px 18px;
           }
 
-          .hero-inner {
-            padding-left: 18px;
-            padding-right: 18px;
+          .impact-home-final .course-card-final {
+            height: 405px;
+            min-height: 405px;
           }
 
-          .hero h1 {
-            font-size: 39px;
-          }
-
-          .hero-text {
-            font-size: 16px;
-          }
-
-          .hero-visual {
-            min-height: 300px;
-          }
-
-          .hero-logo-card {
-            min-height: 285px;
-            padding: 30px;
-          }
-
-          .hero-logo {
-            width: 190px;
-          }
-
-          .stats-inner {
+          .impact-home-final .services-grid-final,
+          .impact-home-final .why-grid {
             grid-template-columns: 1fr;
           }
 
-          .stat {
-            border-left: 0;
-            border-bottom: 1px solid #E7ECF3;
-          }
-
-          .stat:last-child {
-            border-bottom: 0;
-          }
-
-          .course-grid,
-          .services-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .why-panel {
-            min-height: 300px;
-            padding: 30px;
-          }
-
-          .cta-box {
-            padding: 34px 25px;
-          }
-
-          .cta-button {
-            width: 100%;
+          .impact-home-final .cta-box-final {
+            flex-direction: column;
+            align-items: flex-start;
           }
         }
       `}</style>
 
-      {/* Hero */}
       <section className="hero">
         <div className="hero-inner">
           <div className="hero-copy">
             <div className="eyebrow">Impact Training</div>
-
             <h1>
               {isEnglish ? 'We develop skills,' : 'نطوّر المهارات،'}
               <br />
               <span>{isEnglish ? 'and create impact.' : 'ونصنع الأثر.'}</span>
             </h1>
-
             <p className="hero-text">
               {isEnglish
                 ? 'Specialized learning solutions that help people and organizations build skills, improve performance, and deliver measurable results.'
                 : 'حلول تدريبية متخصصة تساعد الأفراد والمنشآت على تطوير المهارات، رفع مستوى الأداء، وتحقيق نتائج عملية قابلة للقياس.'}
             </p>
-
             <div className="hero-actions">
-              <Link href="/training-courses" className="btn-primary">
+              <Link href="/training-courses" className="hero-primary">
                 {isEnglish ? 'Explore training programs' : 'استكشف الدورات التدريبية'}
               </Link>
-
-              <Link href="/recorded-courses" className="btn-secondary">
+              <Link href="/recorded-courses" className="hero-secondary">
                 {isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}
               </Link>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div className="hero-visual">
-            <div className="hero-logo-card">
-              <div
-                className="hero-image"
-                style={{ backgroundImage: `url(${courses[0]?.image || courses[0]?.thumbnail || ''})` }}
-                aria-label={isEnglish ? 'Professional training environment' : 'بيئة تدريب احترافية'}
-              >
-                <div className="hero-image-shade" />
-                <Image
-                  src="/assets/logo/logo_white-remove.png"
-                  alt="Impact Training"
-                  width={180}
-                  height={84}
-                  className="hero-logo"
-                  priority
-                />
-              </div>
+      <section className="stats-wrap" aria-label={isEnglish ? 'Impact statistics' : 'إحصائيات Impact'}>
+        <div className="stats-card">
+          <div className="stat">
+            <span className="stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </span>
+            <strong>+{TRAINER_COUNT.toLocaleString('en-US')}</strong>
+            <span className="stat-label">{isEnglish ? 'Trainers' : 'مدرب ومدربة'}</span>
+          </div>
 
-              <div className="hero-card-title">
-                {isEnglish ? 'Training focused on results' : 'تدريب يركز على النتائج'}
-              </div>
+          <div className="stat">
+            <span className="stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M4 5.5C4 4.67 4.67 4 5.5 4H12V20H5.5C4.67 20 4 19.33 4 18.5V5.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+                <path d="M20 5.5C20 4.67 19.33 4 18.5 4H12V20H18.5C19.33 20 20 19.33 20 18.5V5.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <strong>{loading ? '—' : totalCourseCount}</strong>
+            <span className="stat-label">{isEnglish ? 'Training programs' : 'برنامج تدريبي'}</span>
+          </div>
 
-              <div className="hero-card-subtitle">
-                {isEnglish ? 'Learning solutions for people and organizations' : 'حلول تدريبية للأفراد والمنشآت'}
-              </div>
-            </div>
+          <div className="stat">
+            <span className="stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 3l2.47 5.01 5.53.8-4 3.9.94 5.5L12 15.7l-4.94 2.51.94-5.5-4-3.9 5.53-.8L12 3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <strong>+{SATISFACTION_RATE}%</strong>
+            <span className="stat-label">{isEnglish ? 'Customer satisfaction' : 'معدل رضا العملاء'}</span>
           </div>
         </div>
       </section>
 
-      {/* Quick Stats */}
-      <section className="stats">
-        <div className="stats-inner">
-          <div className="stat">
-            <strong>{loading ? '—' : totalPublished}</strong>
-            <span>{isEnglish ? 'Published courses and programs' : 'دورة وبرنامج منشور'}</span>
-          </div>
-
-          <div className="stat">
-            <strong>{isEnglish ? 'Flexible' : 'مرن'}</strong>
-            <span>{isEnglish ? 'In-person, online and recorded' : 'حضوري وأونلاين ومسجل'}</span>
-          </div>
-
-          <div className="stat">
-            <strong>{isEnglish ? 'Complete' : 'متكامل'}</strong>
-            <span>{isEnglish ? 'Learning, assessment and certificates' : 'تدريب وتقييم وشهادات'}</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="home-category-band">
+      <section className="topics-section">
         <div className="section-inner">
-          <div className="home-category-heading">
+          <div className="section-head">
             <div>
-              <p className="eyebrow">{isEnglish ? 'Development tracks' : 'مسارات التطوير'}</p>
+              <div className="eyebrow">{isEnglish ? 'Development tracks' : 'مسارات التطوير'}</div>
               <h2>{isEnglish ? 'Training topics' : 'موضوعات التدريب'}</h2>
-              <p>{isEnglish ? 'Explore professional topics across the disciplines that move people, teams and organizations forward.' : 'استكشف موضوعات مهنية متنوعة تغطي المجالات التي تطور الأفراد والفرق والمنشآت.'}</p>
+              <p>{isEnglish ? 'Choose a professional field that matches your goals.' : 'اختر المجال التدريبي الذي يناسب احتياجك.'}</p>
             </div>
-            <Link href="/training-courses" className="section-link">{isEnglish ? 'Explore catalog' : 'استكشف الكتالوج'}</Link>
+            <Link href="/training-courses" className="section-link">
+              {isEnglish ? 'View all topics' : 'عرض جميع الموضوعات'}
+            </Link>
           </div>
-          <div className="home-category-grid">
-            {categoryCards.map((category, index) => (
-              <Link key={category.id} href={`/training-courses?category=${encodeURIComponent(category.id)}`} className="home-category-card">
-                <span className="home-category-thumb" style={{ backgroundImage: `url(${category.image || courses.find((course) => course.categoryId === category.id)?.image || ''})` }} />
-                <span className="home-category-index">0{index + 1}</span>
-                <strong>{category.name}</strong>
-                <span>{isEnglish ? 'Professional programs and tracks' : category.description || 'برامج ومسارات مهنية'}</span>
+
+          <HomeCarousel
+            items={categories}
+            ariaLabel={isEnglish ? 'Training topics' : 'موضوعات التدريب'}
+            itemsPerView={{ mobile: 1, tablet: 3, desktop: 6 }}
+            keyExtractor={(category) => category.id}
+            renderItem={(category, index) => (
+              <Link
+                href={`/training-courses?category=${encodeURIComponent(category.id)}`}
+                className="home-category-card-final"
+              >
+                <span className="topic-index">{String(index + 1).padStart(2, '0')}</span>
+                <span className="topic-title">{category.name}</span>
+                <span className="topic-arrow" aria-hidden="true">→</span>
               </Link>
-            ))}
-          </div>
+            )}
+          />
         </div>
       </section>
 
-      {/* Training Courses */}
-      <section className="section courses-section">
+      <section className="courses-section">
         <div className="section-inner">
-          <div className="section-header">
+          <div className="section-head">
             <div>
-              <h2>{isEnglish ? 'Latest training courses' : 'أحدث الدورات التدريبية'}</h2>
-              <p>
-                {isEnglish ? 'Published programs for individuals, with multiple delivery dates by program.' : 'برامج تدريبية منشورة ومتاحة للأفراد، مع مواعيد تنفيذ متعددة حسب البرنامج.'}
-              </p>
+              <div className="eyebrow">{isEnglish ? 'Featured learning' : 'التدريب المميز'}</div>
+              <h2>{isEnglish ? 'Latest training courses' : 'أبرز الدورات التدريبية'}</h2>
+              <p>{isEnglish ? 'Discover selected programs designed for practical impact.' : 'اكتشف برامج مختارة مصممة لتمنحك رحلة تدريبية عملية ومؤثرة.'}</p>
             </div>
-
             <Link href="/training-courses" className="section-link">
               {isEnglish ? 'View all courses' : 'عرض جميع الدورات'}
             </Link>
           </div>
 
-          <div className="course-grid">
-            {loading ? (
-              <div className="loading">{isEnglish ? 'Loading training programs...' : 'جاري تحميل البرامج التدريبية...'}</div>
-            ) : trainingCourses.length === 0 ? (
-              <div className="empty-state">
-                {isEnglish ? 'No published training programs are available.' : 'لا توجد برامج تدريبية منشورة حاليًا.'}
-              </div>
-            ) : (
-              trainingCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
-              ))
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Recorded Courses */}
-      <section className="section courses-section">
-        <div className="section-inner">
-          <div className="section-header">
-            <div>
-              <h2>{isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}</h2>
-              <p>
-                {isEnglish ? 'Learn flexibly at your own pace through courses available on the platform.' : 'تعلّم بمرونة وفي الوقت الذي يناسبك من خلال الدورات المسجلة المتاحة على المنصة.'}
-              </p>
+          {loading ? (
+            <div style={{ padding: '70px 0', textAlign: 'center', color: '#6b778b' }}>
+              {isEnglish ? 'Loading...' : 'جاري التحميل...'}
             </div>
-
-            <Link href="/recorded-courses" className="section-link">
-              {isEnglish ? 'View all recorded courses' : 'عرض جميع الدورات المسجلة'}
-            </Link>
-          </div>
-
-          <div className="course-grid">
-            {loading ? (
-              <div className="loading">{isEnglish ? 'Loading recorded courses...' : 'جاري تحميل الدورات المسجلة...'}</div>
-            ) : recordedCourses.length === 0 ? (
-              <div className="empty-state">
-                {isEnglish ? 'No published recorded courses are available.' : 'لا توجد دورات مسجلة منشورة حاليًا.'}
-              </div>
-            ) : (
-              recordedCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
-              ))
-            )}
-          </div>
+          ) : featuredCourses.length === 0 ? (
+            <div style={{ padding: '70px 0', textAlign: 'center', color: '#6b778b' }}>
+              {isEnglish ? 'No featured courses yet.' : 'لا توجد دورات مميزة حاليًا.'}
+            </div>
+          ) : (
+            <HomeCarousel
+              items={featuredCourses}
+              ariaLabel={isEnglish ? 'Featured courses' : 'الدورات المميزة'}
+              itemsPerView={{ mobile: 1, tablet: 2, desktop: 4 }}
+              keyExtractor={(course) => course.id}
+              renderItem={(course) => <CourseCard course={course} />}
+            />
+          )}
         </div>
       </section>
 
-      {/* Services */}
-      <section className="section services-section">
+      <section className="services-section">
         <div className="section-inner">
-          <div className="section-header">
+          <div className="section-head">
             <div>
+              <div className="eyebrow">{isEnglish ? 'Our solutions' : 'حلولنا'}</div>
               <h2>{isEnglish ? 'Learning solutions for organizations' : 'حلول تدريبية للمنشآت'}</h2>
-              <p>
-                {isEnglish ? 'We help organizations build learning solutions aligned with team needs and business goals.' : 'لا نقدم دورة فقط، بل نساعد المنشآت على بناء حلول تدريبية تتناسب مع احتياجات فرق العمل وأهدافها.'}
-              </p>
+              <p>{isEnglish ? 'Practical services that connect learning with business needs.' : 'خدمات تدريبية واستشارية تجمع بين احتياج العمل وتطوير القدرات.'}</p>
             </div>
-
-            <Link href="/services" className="section-link">
-              {isEnglish ? 'Explore our services' : 'استكشف خدماتنا'}
-            </Link>
+            <Link href="/services" className="section-link">{isEnglish ? 'All services' : 'جميع الخدمات'}</Link>
           </div>
 
-          <div className="services-grid">
-            <article className="service-card">
-              <span className="service-number">01</span>
-              <h3>{isEnglish ? 'Corporate learning' : 'التدريب المؤسسي'}</h3>
-              <p>{isEnglish ? 'Programs designed for organizations and teams around their capability needs and goals.' : 'برامج تدريبية مصممة للمنشآت والفرق وفق الاحتياجات والأهداف المهنية.'}</p>
-            </article>
-
-            <article className="service-card">
-              <span className="service-number">02</span>
-              <h3>{isEnglish ? 'Professional assessments' : 'التقييمات المهنية'}</h3>
-              <p>{isEnglish ? 'Solutions that help organizations measure capability and identify development opportunities.' : 'حلول تساعد المنشآت على قياس المهارات وتحديد فرص التطوير.'}</p>
-            </article>
-
-            <article className="service-card">
-              <span className="service-number">03</span>
-              <h3>{isEnglish ? 'Digital learning' : 'التعلم الإلكتروني'}</h3>
-              <p>{isEnglish ? 'Digital content and flexible learning experiences that support continuous development.' : 'محتوى تدريبي رقمي وتجارب تعلم مرنة تدعم التعلم المستمر.'}</p>
-            </article>
-
-            <article className="service-card">
-              <span className="service-number">04</span>
-              <h3>{isEnglish ? 'Learning consulting' : 'الاستشارات التدريبية'}</h3>
-              <p>{isEnglish ? 'Specialist support to design and deliver integrated learning solutions for organizations.' : 'دعم متخصص لتصميم وتنفيذ حلول تدريبية متكاملة للمنشآت.'}</p>
-            </article>
+          <div className="services-grid-final">
+            {[
+              ['01', isEnglish ? 'Corporate training' : 'التدريب المؤسسي', isEnglish ? 'Programs tailored to team needs and business goals.' : 'برامج مصممة وفق احتياجات فرق العمل وأهداف المنشأة.'],
+              ['02', isEnglish ? 'Training needs analysis' : 'تحليل الاحتياج التدريبي', isEnglish ? 'Assess gaps and build the right learning path.' : 'تحليل الاحتياجات وتحديد الفجوات وبناء المسار التدريبي المناسب.'],
+              ['03', isEnglish ? 'Learning assessments' : 'التقييمات المهنية', isEnglish ? 'Measure capability before and after learning.' : 'حلول تساعدك على قياس المهارات قبل وبعد التدريب.'],
+              ['04', isEnglish ? 'Training materials design' : 'تصميم الحقائب التدريبية', isEnglish ? 'Structured learning materials built around clear outcomes.' : 'حقائب تدريبية منظمة مبنية على أهداف ومخرجات واضحة.'],
+              ['05', isEnglish ? 'Short consultations' : 'الاستشارات القصيرة', isEnglish ? 'Focused sessions that turn questions into practical action.' : 'جلسات استشارية مركزة تساعد على تحويل المعرفة إلى ممارسة عملية.'],
+              ['06', isEnglish ? 'Training disclosure' : 'الإفصاح التدريبي', isEnglish ? 'Practical support to prepare and complete the training disclosure journey.' : 'مساندة عملية لتجهيز واستكمال رحلة الإفصاح التدريبي.'],
+            ].map(([number, title, description]) => (
+              <article className="service-card-final" key={number}>
+                <span className="service-number">{number}</span>
+                <h3>{title}</h3>
+                <p>{description}</p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Why Impact */}
-      <section className="section why-section">
+      <section className="why-section">
         <div className="section-inner">
           <div className="why-grid">
             <div className="why-copy">
-              <h2>
-                {isEnglish ? 'Learning that becomes' : 'التدريب الذي يتحول'}
-                <br />
-                {isEnglish ? 'impact at work.' : 'إلى أثر في العمل.'}
-              </h2>
+              <div className="eyebrow">{isEnglish ? 'Why Impact' : 'لماذا Impact'}</div>
+              <h2>{isEnglish ? 'Learning that becomes impact at work.' : 'التدريب الذي يتحول إلى أثر في العمل.'}</h2>
+              <p>{isEnglish ? 'We connect quality content, expert trainers and real workplace needs to create practical learning experiences.' : 'نجمع بين جودة المحتوى، خبرة المدربين، واحتياجات بيئة العمل لصناعة تجارب تدريبية عملية.'}</p>
 
-              <p>
-                {isEnglish ? 'We deliver practical learning experiences that connect content quality, expert facilitation and real workplace needs.' : 'نركز على تقديم تجارب تدريبية عملية تجمع بين جودة المحتوى، خبرة المدربين، واحتياجات سوق العمل.'}
-              </p>
-
-              <div className="benefits">
-                <div className="benefit">
-                  <div className="benefit-mark">01</div>
-                  <div>
-                    <strong>{isEnglish ? 'Practical content' : 'محتوى عملي'}</strong>
-                    <span>{isEnglish ? 'Connected to real workplace skills and challenges.' : 'يرتبط بالمهارات والتحديات الفعلية في بيئة العمل.'}</span>
+              <div className="benefits-final">
+                {[
+                  ['01', isEnglish ? 'Practical content' : 'محتوى عملي', isEnglish ? 'Connected to real workplace needs.' : 'مرتبط بالاحتياجات الفعلية في بيئة العمل.'],
+                  ['02', isEnglish ? 'Multiple formats' : 'خيارات تدريب متعددة', isEnglish ? 'In-person, online and recorded learning.' : 'حضوري، أونلاين، ودورات مسجلة.'],
+                  ['03', isEnglish ? 'Complete experience' : 'تجربة متكاملة', isEnglish ? 'Registration, assessment and certification in one journey.' : 'من التسجيل وحتى التقييم والشهادة ضمن رحلة واحدة.'],
+                ].map(([number, title, description]) => (
+                  <div className="benefit-final" key={number}>
+                    <div className="benefit-mark">{number}</div>
+                    <div>
+                      <strong>{title}</strong>
+                      <span>{description}</span>
+                    </div>
                   </div>
-                </div>
-
-                <div className="benefit">
-                  <div className="benefit-mark">02</div>
-                  <div>
-                    <strong>{isEnglish ? 'Multiple formats' : 'خيارات تدريب متعددة'}</strong>
-                    <span>{isEnglish ? 'In-person, live online and recorded learning.' : 'حضوري، أونلاين مباشر، ودورات مسجلة.'}</span>
-                  </div>
-                </div>
-
-                <div className="benefit">
-                  <div className="benefit-mark">03</div>
-                  <div>
-                    <strong>{isEnglish ? 'Complete experience' : 'تجربة تدريب متكاملة'}</strong>
-                    <span>{isEnglish ? 'From registration through assessment and certification.' : 'من التسجيل وحتى التقييم والشهادة.'}</span>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
 
-            <div className="why-panel">
+            <div className="why-panel-final">
               <small>IMPACT TRAINING</small>
-
-              <h3>
-                {isEnglish ? 'We believe real learning' : 'نؤمن أن التدريب الحقيقي'}
-                <br />
-                {isEnglish ? 'starts with a clear need.' : 'يبدأ من احتياج واضح.'}
-              </h3>
-
-              <p>
-                {isEnglish ? 'That is why our solutions are goal-led, practical and suitable for people and organizations.' : 'لذلك نصمم حلولنا التدريبية لتكون مرتبطة بالأهداف، قابلة للتطبيق، ومناسبة للأفراد والمنشآت.'}
-              </p>
+              <h3>{isEnglish ? 'We design learning around a clear need.' : 'نصمم التدريب انطلاقًا من احتياج واضح.'}</h3>
+              <p>{isEnglish ? 'Our aim is simple: relevant learning, practical application and visible impact.' : 'هدفنا بسيط: تعلم مناسب، تطبيق عملي، وأثر يمكن ملاحظته.'}</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="section cta-section">
+      <section className="cta-section">
         <div className="section-inner">
-          <div className="cta-box">
+          <div className="cta-box-final">
             <div>
               <h2>{isEnglish ? 'Looking for a learning solution for your organization?' : 'هل تبحث عن حل تدريبي لمنشأتك؟'}</h2>
-
-              <p>
-                {isEnglish ? 'Talk to us about your needs and design the right learning solution.' : 'تواصل معنا لمناقشة احتياجكم وتصميم الحل التدريبي المناسب.'}
-              </p>
+              <p>{isEnglish ? 'Tell us what you need and we will help you shape the right learning solution.' : 'تواصل معنا لمناقشة احتياجكم وبناء الحل التدريبي المناسب.'}</p>
             </div>
-
-            <Link href="/contact" className="cta-button">
-              {isEnglish ? 'Contact us' : 'تواصل معنا'}
-            </Link>
+            <Link href="/contact" className="cta-button-final">{isEnglish ? 'Contact us' : 'تواصل معنا'}</Link>
           </div>
         </div>
       </section>
@@ -1099,68 +1110,64 @@ export default function HomePage() {
 function CourseCard({ course }: { course: Course }) {
   const { isEnglish } = useLocale();
   const isRecorded = course.type === 'recorded';
-
   const href = isRecorded
     ? `/course-details?id=${encodeURIComponent(course.id)}`
     : `/training-program?id=${encodeURIComponent(course.id)}`;
 
-  const description =
-    course.shortDescription ||
-    course.description ||
-    'برنامج تدريبي متخصص مصمم لتطوير المهارات وتحقيق نتائج عملية.';
+  const image =
+    course.image ||
+    (course.categoryId?.toLowerCase().includes('تقنية')
+      ? 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80'
+      : course.categoryId?.toLowerCase().includes('قيادة')
+        ? 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=900&q=80'
+        : isRecorded
+          ? 'https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=900&q=80'
+          : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=900&q=80');
 
   const duration =
     course.days && course.days > 0
-      ? `${course.days} ${course.days === 1 ? 'يوم' : 'أيام'}`
+      ? `${course.days} ${course.days === 1 ? (isEnglish ? 'day' : 'يوم') : (isEnglish ? 'days' : 'أيام')}`
       : course.hours && course.hours > 0
-        ? `${course.hours} ساعة`
+        ? `${course.hours} ${isEnglish ? 'hours' : 'ساعة'}`
         : null;
 
-  const image = course.image || (course.categoryId?.toLowerCase().includes('تقنية')
-    ? 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80'
-    : course.categoryId?.toLowerCase().includes('قيادة')
-      ? 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=900&q=80'
-      : isRecorded
-        ? 'https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=900&q=80'
-        : 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=900&q=80');
-
+  const description =
+    course.shortDescription ||
+    course.description ||
+    (isEnglish
+      ? 'A professional training program designed for practical workplace impact.'
+      : 'برنامج تدريبي مهني مصمم لتطوير المهارات وتحقيق أثر عملي في بيئة العمل.');
 
   return (
-    <article className="course-card">
-      <div className="course-image" style={{ backgroundImage: `url(${image})` }}>
-        <span className="course-image-label">
-          {isRecorded ? (isEnglish ? 'Recorded course' : 'دورة مسجلة') : (isEnglish ? 'Training program' : 'برنامج تدريبي')}
-        </span>
-      </div>
-
-      <div className="course-body">
-        <div className="course-type">
-          {course.featured ? (isEnglish ? 'Featured program' : 'برنامج مميز') : 'Impact Training'}
-        </div>
-
-        <h3 className="course-title">{course.title}</h3>
-
-        <p className="course-description">{description}</p>
-
-        <div className="course-meta">
-          {duration && <span>{duration}</span>}
-
-          <span>
-            {isRecorded ? (isEnglish ? 'Flexible learning' : 'تعلم مرن') : (isEnglish ? 'Professional training' : 'تدريب مهني')}
+    <article className="course-card-final">
+      <Link href={href} aria-label={`${isEnglish ? 'View' : 'عرض'} ${course.title}`}>
+        <div className="course-thumb" style={{ backgroundImage: `url(${image})` }}>
+          <span className="course-badge">
+            {isRecorded ? (isEnglish ? 'Recorded course' : 'دورة مسجلة') : (isEnglish ? 'Training program' : 'برنامج تدريبي')}
           </span>
+        </div>
+      </Link>
 
-          {course.delivery && (
+      <div className="course-body-final">
+        <div className="course-kicker">{course.featured ? (isEnglish ? 'Featured program' : 'برنامج مميز') : 'Impact Training'}</div>
+        <h3 className="course-title-final">{course.title}</h3>
+        <p className="course-desc-final">{description}</p>
+
+        <div className="course-meta-final">
+          {duration ? <span>{duration}</span> : null}
+          <span>{isEnglish ? 'Professional training' : 'تدريب مهني'}</span>
+          {course.delivery ? (
             <span>
               {course.delivery === 'online'
                 ? (isEnglish ? 'Online' : 'أونلاين')
                 : (isEnglish ? 'In-person' : 'حضوري')}
             </span>
-          )}
+          ) : null}
         </div>
 
-        <div className="course-footer">
-          <Link href={href} className="course-button">
-            {isEnglish ? 'View details' : 'عرض التفاصيل'}
+        <div className="course-foot-final">
+          <Link href={href} className="course-button-final">
+            {isEnglish ? 'View details' : 'عرض التفاصيل'} →
           </Link>
         </div>
       </div>

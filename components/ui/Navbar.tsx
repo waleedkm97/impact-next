@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
@@ -14,6 +14,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const { isEnglish, setLocale } = useLocale();
+  const isHome = pathname === '/';
 
   useEffect(() => {
     let active = true;
@@ -21,14 +22,10 @@ export default function Navbar() {
     traineeRepository
       .getCurrentUser()
       .then((currentUser) => {
-        if (active) {
-          setUser(currentUser);
-        }
+        if (active) setUser(currentUser);
       })
       .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       });
 
     return () => {
@@ -42,27 +39,23 @@ export default function Navbar() {
   }, [pathname]);
 
   return (
-    <nav className="navbar">
+    <nav className={`navbar${isHome ? ' navbar-home' : ''}`}>
       <div className="nav-container">
         <Link href="/" className="logo" aria-label="Impact Training">
           <Image
-            src="/assets/logo/logo_blue-remove.png"
-  alt="Impact Training"
-  width={120}
-  height={70}
-  priority
-  style={{
-    width: '120px',
-    height: 'auto',
-    objectFit: 'contain',
-  }}
-/>
+            src={isHome ? '/assets/logo/logo_white-remove.png' : '/assets/logo/logo_blue-remove.png'}
+            alt="Impact Training"
+            width={120}
+            height={70}
+            priority
+            style={{ width: '120px', height: 'auto', objectFit: 'contain' }}
+          />
         </Link>
 
         <button
           type="button"
           className="nav-menu-toggle"
-          aria-label="فتح القائمة"
+          aria-label={isEnglish ? 'Open menu' : 'فتح القائمة'}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}
         >
@@ -72,11 +65,12 @@ export default function Navbar() {
         </button>
 
         <div className={`nav-links ${menuOpen ? 'is-open' : ''}`} aria-label={isEnglish ? 'Main navigation' : 'التنقل الرئيسي'}>
-          <Link href="/">{isEnglish ? 'Home' : 'الرئيسية'}</Link>
-          <Link href="/recorded-courses">{isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}</Link>
-          <Link href="/training-courses">{isEnglish ? 'Training courses' : 'الدورات التدريبية'}</Link>
-          <Link href="/training-disclosure">{isEnglish ? 'Training disclosure' : 'الإفصاح التدريبي'}</Link>
-          <Link href="/verify-certificate">{isEnglish ? 'Certificate verification' : 'التحقق من الشهادة'}</Link>
+          <Link href="/" aria-current={pathname === '/' ? 'page' : undefined}>{isEnglish ? 'Home' : 'الرئيسية'}</Link>
+          <Link href="/recorded-courses" aria-current={pathname === '/recorded-courses' ? 'page' : undefined}>{isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}</Link>
+          <Link href="/training-courses" aria-current={pathname === '/training-courses' ? 'page' : undefined}>{isEnglish ? 'Training courses' : 'الدورات التدريبية'}</Link>
+          <Link href="/training-disclosure" aria-current={pathname === '/training-disclosure' ? 'page' : undefined}>{isEnglish ? 'Training disclosure' : 'الإفصاح التدريبي'}</Link>
+          <Link href="/verify-certificate" aria-current={pathname === '/verify-certificate' ? 'page' : undefined}>{isEnglish ? 'Certificate verification' : 'التحقق من الشهادة'}</Link>
+
           <div className={`nav-services-menu ${servicesOpen ? 'is-open' : ''}`}>
             <button
               type="button"
@@ -87,39 +81,50 @@ export default function Navbar() {
             >
               {isEnglish ? 'Services' : 'الخدمات'} <span aria-hidden="true">⌄</span>
             </button>
+
             <div
               className="nav-services-dropdown"
               style={servicesOpen ? { display: 'grid', opacity: 1, visibility: 'visible', transform: 'translateY(0)' } : undefined}
             >
-              <Link href="/services" className="nav-services-all"><span>◈</span> {isEnglish ? 'View all services' : 'عرض جميع الخدمات'}</Link>
-              <Link href="/training-disclosure"><span>▧</span> {isEnglish ? 'Training disclosure' : 'الإفصاح التدريبي'}</Link>
-              <Link href="/recorded-courses"><span>▣</span> {isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}</Link>
-              <Link href="/training-courses"><span>▣</span> {isEnglish ? 'Training courses' : 'الدورات التدريبية'}</Link>
-              <Link href="/services?service=needs-analysis"><span>⌁</span> {isEnglish ? 'Training needs analysis' : 'التقييمات وتحليل الاحتياجات التدريبية'}</Link>
-              <Link href="/contact?service=short-consultation"><span>↗</span> {isEnglish ? 'Short consultations' : 'الاستشارات القصيرة'}</Link>
-              <Link href="/services?service=training-materials"><span>▤</span> {isEnglish ? 'Training material design' : 'تصميم الحقائب التدريبية'}</Link>
+              <Link href="/services" className="nav-services-all">{isEnglish ? 'View all services' : 'عرض جميع الخدمات'}</Link>
+              <Link href="/training-disclosure">{isEnglish ? 'Training disclosure' : 'الإفصاح التدريبي'}</Link>
+              <Link href="/recorded-courses">{isEnglish ? 'Recorded courses' : 'الدورات المسجلة'}</Link>
+              <Link href="/training-courses">{isEnglish ? 'Training courses' : 'الدورات التدريبية'}</Link>
+              <Link href="/services?service=needs-analysis">{isEnglish ? 'Training needs analysis' : 'التقييمات وتحليل الاحتياجات التدريبية'}</Link>
+              <Link href="/contact?service=short-consultation">{isEnglish ? 'Short consultations' : 'الاستشارات القصيرة'}</Link>
+              <Link href="/services?service=training-materials">{isEnglish ? 'Training material design' : 'تصميم الحقائب التدريبية'}</Link>
             </div>
           </div>
+
           <Link href="/contact">{isEnglish ? 'Contact us' : 'تواصل معنا'}</Link>
         </div>
 
         <div className="nav-actions">
-          {loading ? null : user ? (
-            <Link href="/account" className="nav-login">
-              {isEnglish ? 'My account' : 'حسابي'}
-            </Link>
-          ) : (
-            <Link href="/login" className="nav-login">
-              {isEnglish ? 'Log in' : 'تسجيل الدخول'}
-            </Link>
-          )}
           <button
             type="button"
             className="nav-language"
             onClick={() => setLocale(isEnglish ? 'ar' : 'en')}
+            aria-label={isEnglish ? 'Switch to Arabic' : 'التبديل إلى الإنجليزية'}
+            title={isEnglish ? 'Switch to Arabic' : 'English'}
           >
-            {isEnglish ? 'العربية' : 'English'}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M3 12h18M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21M12 3c-2.5 2.5-3.75 5.5-3.75 9S9.5 18.5 12 21" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
           </button>
+
+          <Link href="/training-courses" className="nav-search" aria-label={isEnglish ? 'Search courses' : 'بحث في الدورات'}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+              <path d="M20 20L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </Link>
+
+          {!loading ? (
+            <Link href={user ? '/account' : '/login'} className="nav-login">
+              {isEnglish ? 'My account' : 'حسابي'}
+            </Link>
+          ) : null}
         </div>
       </div>
     </nav>
