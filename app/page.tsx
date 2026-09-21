@@ -730,10 +730,11 @@ export default function HomePage() {
         }
 
         .impact-home-final .cta-box-final h2 {
-          margin: 0;
-          font-size: clamp(25px, 3vw, 38px);
-          line-height: 1.25;
-        }
+  margin: 0;
+  font-size: clamp(25px, 3vw, 38px);
+  line-height: 1.25;
+  color: #fff;
+}
 
         .impact-home-final .cta-box-final p {
           margin: 12px 0 0;
@@ -862,8 +863,8 @@ export default function HomePage() {
           }
 
           .impact-home-final .stats-wrap {
-            margin-top: -25px;
-          }
+  margin-top: 0;
+}
 
           .impact-home-final .stats-card {
             grid-template-columns: 1fr;
