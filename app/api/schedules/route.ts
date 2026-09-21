@@ -197,17 +197,25 @@ export async function GET(request: Request) {
     const available = searchParams.get('available') === 'true';
 
     const finalWhere: any = {
-      ...where,
-      ...(request.headers.get('cookie')?.includes('impact_staff=') ? await scopedScheduleWhere(request) : {}),
-      ...(available
-        ? {
-            status: 'available',
-            currentParticipants: {
-              lt: prisma.schedule.fields.maxParticipants,
-            },
-          }
-        : {}),
-    };
+  ...where,
+  ...(request.headers.get('cookie')?.includes('impact_staff=')
+    ? await scopedScheduleWhere(request)
+    : {}),
+  ...(available
+    ? {
+        status: 'available',
+        currentParticipants: {
+          lt: prisma.schedule.fields.maxParticipants,
+        },
+      }
+    : {}),
+};
+
+console.log('SCHEDULE GET DEBUG:', {
+  requestedCourseId: searchParams.get('courseId'),
+  hasStaffCookie: request.headers.get('cookie')?.includes('impact_staff='),
+  finalWhere,
+});
 
     const schedules = await prisma.schedule.findMany({
       where: finalWhere,
@@ -419,12 +427,13 @@ export async function POST(request: Request) {
             String(id),
           )
         : null;
-
+console.log('GENERATE REQUESTED IDS:', requestedIds?.length);
+console.log('GENERATE REQUESTED IDS SAMPLE:', requestedIds?.slice(0, 10));
       const courses =
         await prisma.course.findMany({
           where: {
             type: 'training',
-            trainingKind: 'public',
+            
           
             ...(requestedIds
               ? {
@@ -443,8 +452,60 @@ export async function POST(request: Request) {
             },
           },
         });
+      console.log('GENERATE COURSES FOUND:', courses.length);
+            const existingSchedules =
+        await prisma.schedule.findMany({
+          where: {
+            courseId: {
+              in: courses.map((course) => course.id),
+            },
+            city: {
+              in: cities,
+            },
+            startDate: {
+              gte: start,
+              lte: end,
+            },
+          },
+          select: {
+            courseId: true,
+            city: true,
+            startDate: true,
+          },
+        });
 
-      const created: any[] = [];
+      const scheduleKey = (
+        courseId: string,
+        city: string,
+        date: Date,
+      ) =>
+        `${courseId}__${city}__${date.getFullYear()}-${String(
+          date.getMonth() + 1,
+        ).padStart(2, '0')}-${String(
+          date.getDate(),
+        ).padStart(2, '0')}`;
+
+      const existingKeys = new Set(
+        existingSchedules
+          .filter(
+            (schedule) =>
+              schedule.city &&
+              schedule.startDate,
+          )
+          .map((schedule) =>
+            scheduleKey(
+              schedule.courseId,
+              schedule.city!,
+              schedule.startDate,
+            ),
+          ),
+      );
+
+      const rowsToCreate: any[] = [];
+      const createdIds: string[] = [];
+
+      let expectedCount = 0;
+      let skippedCount = 0;
 
       for (const course of courses) {
         for (
@@ -462,6 +523,7 @@ export async function POST(request: Request) {
         ) {
           const year =
             monthCursor.getFullYear();
+
           const month =
             monthCursor.getMonth();
 
@@ -502,47 +564,44 @@ export async function POST(request: Request) {
             }
           }
 
-          if (!sundays.length) continue;
+          if (!sundays.length) {
+            continue;
+          }
 
           for (
             let cityIndex = 0;
             cityIndex < cities.length;
             cityIndex += 1
           ) {
-            const city = cities[cityIndex];
+            const city =
+              cities[cityIndex];
+
             const date =
               sundays[
-                cityIndex % sundays.length
+                cityIndex %
+                  sundays.length
               ];
 
-            const dayStart = new Date(
-              date.getFullYear(),
-              date.getMonth(),
-              date.getDate(),
+            expectedCount += 1;
+
+            const key = scheduleKey(
+              course.id,
+              city,
+              date,
             );
 
-            const dayEnd = new Date(
-              date.getFullYear(),
-              date.getMonth(),
-              date.getDate() + 1,
-            );
+            if (existingKeys.has(key)) {
+              skippedCount += 1;
 
-            const existing =
-              await prisma.schedule.findFirst({
-                where: {
-                  courseId: course.id,
-                  city,
-                  startDate: {
-                    gte: dayStart,
-                    lt: dayEnd,
-                  },
-                },
-                select: {
-                  id: true,
-                },
-              });
+              console.log(
+                'SKIPPED EXISTING SCHEDULE:',
+                course.id,
+                city,
+                date.toISOString(),
+              );
 
-            if (existing) continue;
+              continue;
+            }
 
             const online =
               city === 'Online';
@@ -575,65 +634,125 @@ export async function POST(request: Request) {
               course.trainerAssignments[0]
                 ?.staff;
 
-            const schedule =
-              await prisma.schedule.create({
-                data: {
-                  id: `schedule-${Date.now()}-${Math.random()
-                    .toString(36)
-                    .slice(2, 8)}`,
-                  courseId: course.id,
-                  courseTitle: course.title,
-                  title: course.title,
-                  description:
-                    course.shortDescription ??
-                    course.description,
-                  startDate: date,
-                  endDate: new Date(
-                    date.getFullYear(),
-                    date.getMonth(),
-                    date.getDate() + 2,
-                  ),
-                  startTime: '09:00',
-                  endTime: online
-                    ? '12:00'
-                    : '14:00',
-                  city,
-                  maxParticipants: 20,
-                  currentParticipants: 0,
-                  waitlistMax: 10,
-                  currentWaitlist: 0,
-                  price,
-                  currency: 'SAR',
-                  instructorId:
-                    trainer?.id ?? null,
-                  instructorName:
-                    trainer?.name ?? null,
-                  trainerId:
-                    trainer?.id ?? null,
-                  status: 'available',
-                  published: true,
-                  allowWaitlist: true,
-                  requireConfirmation: false,
-                  recurrence: 'once',
-                  postAssessmentEnabled:
-                    course.postAssessmentEnabled,
-                  courseEvaluationEnabled:
-                    course.courseEvaluationEnabled,
-                },
-                include: scheduleInclude,
-              });
+            const id =
+              `schedule-${Date.now()}-${Math.random()
+                .toString(36)
+                .slice(2, 8)}`;
 
-            created.push(
-              serializeSchedule(schedule),
-            );
+            rowsToCreate.push({
+              id,
+              courseId: course.id,
+              courseTitle: course.title,
+              title: course.title,
+              description:
+                course.shortDescription ??
+                course.description,
+              startDate: date,
+              endDate: new Date(
+                date.getFullYear(),
+                date.getMonth(),
+                date.getDate() + 2,
+              ),
+              startTime: '09:00',
+              endTime: online
+                ? '12:00'
+                : '14:00',
+              city,
+              maxParticipants: 20,
+              currentParticipants: 0,
+              waitlistMax: 10,
+              currentWaitlist: 0,
+              price,
+              currency: 'SAR',
+              instructorId:
+                trainer?.id ?? null,
+              instructorName:
+                trainer?.name ?? null,
+              trainerId:
+                trainer?.id ?? null,
+              status: 'available',
+              published: true,
+              allowWaitlist: true,
+              requireConfirmation: false,
+              recurrence: 'once',
+              postAssessmentEnabled:
+                course.postAssessmentEnabled,
+              courseEvaluationEnabled:
+                course.courseEvaluationEnabled,
+            });
+
+            createdIds.push(id);
+
+            existingKeys.add(key);
           }
         }
       }
 
+      console.log(
+        'GENERATE EXPECTED:',
+        expectedCount,
+      );
+
+      console.log(
+        'GENERATE EXISTING:',
+        skippedCount,
+      );
+
+      console.log(
+        'GENERATE TO CREATE:',
+        rowsToCreate.length,
+      );
+
+      const BATCH_SIZE = 500;
+
+      for (
+        let index = 0;
+        index < rowsToCreate.length;
+        index += BATCH_SIZE
+      ) {
+        const batch =
+          rowsToCreate.slice(
+            index,
+            index + BATCH_SIZE,
+          );
+
+        await prisma.schedule.createMany({
+          data: batch,
+        });
+
+        console.log(
+          'CREATED SCHEDULE BATCH:',
+          index + batch.length,
+          '/',
+          rowsToCreate.length,
+        );
+      }
+
+      const createdSchedules =
+        requestedIds?.length === 1 &&
+        createdIds.length
+          ? await prisma.schedule.findMany({
+              where: {
+                id: {
+                  in: createdIds,
+                },
+              },
+              include: scheduleInclude,
+              orderBy: {
+                startDate: 'asc',
+              },
+            })
+          : [];
+
       return Response.json({
         success: true,
-        created: created.length,
-        schedules: created,
+        expected: expectedCount,
+        existing: skippedCount,
+        created: createdIds.length,
+        schedules:
+          createdSchedules.map(
+            serializeSchedule,
+          ),
       });
     }
 
@@ -1200,6 +1319,40 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const body = await request.json();
+
+    // حذف مجموعة مواعيد دفعة واحدة
+    if (body.action === 'bulkDelete') {
+      const ids = Array.isArray(body.ids)
+        ? body.ids
+            .map((id: unknown) => String(id))
+            .filter(Boolean)
+        : [];
+
+      if (!ids.length) {
+        return Response.json(
+          {
+            success: false,
+            error: 'لم يتم تحديد أي مواعيد للحذف.',
+          },
+          { status: 400 },
+        );
+      }
+
+      const result = await prisma.schedule.deleteMany({
+        where: {
+          id: {
+            in: ids,
+          },
+        },
+      });
+
+      return Response.json({
+        success: true,
+        deleted: result.count,
+      });
+    }
+
+    // حذف موعد واحد
     const id = String(body.id ?? '');
 
     if (!id) {
@@ -1218,6 +1371,7 @@ export async function DELETE(request: Request) {
 
     return Response.json({
       success: true,
+      deleted: 1,
     });
   } catch (error) {
     console.error(

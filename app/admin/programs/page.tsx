@@ -271,23 +271,46 @@ export default function ProgramsAdmin() {
     null,
   );
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [courseSchedules, setCourseSchedules] = useState<Record<string, Schedule[]>>({});
   const [scheduleForm, setScheduleForm] =
     useState<ScheduleForm>(emptySchedule);
   const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
 
   async function load() {
-    const [courseResponse, cats] = await Promise.all([
-      fetch('/api/courses', { cache: 'no-store' }),
-      fetch('/api/categories', { cache: 'no-store' }).then((response) => response.json()).then((data) => data.categories ?? []),
-    ]);
+    const [courseResponse, cats, scheduleResponse] = await Promise.all([
+  fetch('/api/courses', { cache: 'no-store' }),
+  fetch('/api/categories', { cache: 'no-store' }).then((response) =>
+    response.json(),
+  ).then((data) => data.categories ?? []),
+  fetch('/api/schedules', { cache: 'no-store' }),
+]);
 
-    const courseData = await courseResponse.json();
-    const courses = (courseData.courses ?? []).filter(
-      (course: Course) => course.type === 'training',
-    );
+const courseData = await courseResponse.json();
+const scheduleData = await scheduleResponse.json();
 
-    setPrograms(courses);
-    setCategories(cats);
+const courses = (courseData.courses ?? []).filter(
+  (course: Course) => course.type === 'training',
+);
+
+const scheduleMap: Record<string, Schedule[]> = {};
+
+for (const rawSchedule of scheduleData.schedules ?? []) {
+  const schedule = {
+    ...rawSchedule,
+    startDate: new Date(rawSchedule.startDate),
+    endDate: new Date(rawSchedule.endDate),
+  } as Schedule;
+
+  if (!scheduleMap[schedule.courseId]) {
+    scheduleMap[schedule.courseId] = [];
+  }
+
+  scheduleMap[schedule.courseId].push(schedule);
+}
+
+setPrograms(courses);
+setCategories(cats);
+setCourseSchedules(scheduleMap);
   }
 
   useEffect(() => {
@@ -1115,9 +1138,9 @@ setAssessmentSchedules(updatedSchedules);
       return;
     }
 
-    for (const schedule of schedules) {
-      await scheduleRepository.delete(schedule.id);
-    }
+   await scheduleRepository.deleteMany(
+  schedules.map((schedule) => schedule.id),
+);
 
     setSchedules([]);
     setEditingSchedule(null);
@@ -1143,9 +1166,9 @@ setAssessmentSchedules(updatedSchedules);
       return;
     }
 
-    for (const schedule of publicSchedules) {
-      await scheduleRepository.delete(schedule.id);
-    }
+   await scheduleRepository.deleteMany(
+  publicSchedules.map((schedule) => schedule.id),
+);
 
     if (programForSchedule) setSchedules([]);
 
@@ -1166,12 +1189,21 @@ setAssessmentSchedules(updatedSchedules);
       return;
     }
 
-    const created = await scheduleRepository.generateSchedules({
-      startDate: `${year}-01-01`,
-      endDate: `${year}-12-31`,
-      cities,
-      courseIds: [programForSchedule.id],
-    });
+   const today = new Date();
+
+const startDate =
+  year === today.getFullYear()
+    ? `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+        today.getDate(),
+      ).padStart(2, '0')}`
+    : `${year}-01-01`;
+
+const created = await scheduleRepository.generateSchedules({
+  startDate,
+  endDate: `${year}-12-31`,
+  cities,
+  courseIds: [programForSchedule.id],
+});
 
     setSchedules(
       await scheduleRepository.findByCourseId(programForSchedule.id),
@@ -1393,7 +1425,7 @@ const created = Array.isArray(result.schedules)
                     SAR أساس
                   </span>
                 </div>
-
+ 
                 <div className="admin-card-actions">
                   <button
                     className="admin-btn admin-btn-gold"
