@@ -3161,3 +3161,17 @@ body {
 body {
   color-scheme: light !important;
 }
+/* ===== GLOBAL NAVBAR SCROLL BEHAVIOR ===== */
+.navbar {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.navbar-visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.navbar-hidden {
+  transform: translateY(-110%);
+  opacity: 0;
+}
