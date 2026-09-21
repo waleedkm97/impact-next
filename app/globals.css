@@ -1929,7 +1929,8 @@
   font-family: "Segoe UI", Tahoma, Arial, sans-serif;
 }
 .admin-shell * { box-sizing: border-box; }
-.admin-sidebar { width: 260px; min-height:100vh; position:fixed; right:0; top:0; bottom:0; z-index:40; background:linear-gradient(180deg,#071d4d,#0b255e); color:#fff; display:flex; flex-direction:column; padding:20px 14px; }
+.admin-sidebar { width: 260px; min-height:100vh; position:fixed; right:0; top:0; bottom:0; z-index:40; overflow-y: auto;
+overflow-x: hidden; background:linear-gradient(180deg,#071d4d,#0b255e); color:#fff; display:flex; flex-direction:column; padding:20px 14px; }
 .admin-brand { padding:10px 12px 20px; border-bottom:1px solid rgba(255,255,255,.12); }
 .admin-brand-title { font-size:21px; font-weight:800; }
 .admin-brand-subtitle { margin-top:4px; font-size:12px; color:rgba(255,255,255,.65); }
@@ -3094,4 +3095,69 @@ body {
 
 .footer a[href*="instagram"] + a[href*="linkedin"] {
   display: inline-flex !important;
+}
+/* =========================================================
+   MOBILE TRAINING CATALOG REFINEMENT
+   ========================================================= */
+
+@media (max-width: 600px) {
+  /* إزالة المساحة الكبيرة حول منطقة البحث في الجوال */
+  .training-catalog-hero {
+    padding: 8px 12px 18px !important;
+    background: #09223f !important;
+    border-bottom: 0 !important;
+  }
+
+  /* جعل صندوق البحث عملي ومضغوط */
+  .training-filter-box {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+    gap: 10px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10) !important;
+  }
+
+  .training-filter-box .filter-field {
+    gap: 5px !important;
+  }
+
+  .training-filter-box .filter-field label {
+    font-size: 11px !important;
+  }
+
+  .training-filter-box .filter-field input,
+  .training-filter-box .filter-field select,
+  .catalog-search-btn {
+    height: 44px !important;
+  }
+
+  .catalog-search-btn {
+    margin-top: 2px !important;
+  }
+
+  /* تقليل المسافة قبل الدورات */
+  .training-catalog-section {
+    padding-top: 24px !important;
+  }
+}
+
+
+/* =========================================================
+   FORCE LIGHT MODE
+   لا تجعل إعداد Dark Mode في الجهاز يقلب الموقع
+   ========================================================= */
+
+html {
+  color-scheme: light !important;
+}
+
+html,
+body {
+  background-color: #ffffff;
+}
+
+body {
+  color-scheme: light !important;
 }

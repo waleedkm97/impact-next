@@ -283,13 +283,14 @@ export default function HomePage() {
           display: none;
         }
 
-        /* ===== STATS: SEPARATE WHITE FLOATING PANEL ===== */
-        .impact-home-final .stats-wrap {
-          position: relative;
-          z-index: 5;
-          margin-top: -40px;
-          padding: 0 24px;
-        }
+        /* ===== STATS: FULLY SEPARATE SECTION ===== */
+.impact-home-final .stats-wrap {
+  position: relative;
+  z-index: 2;
+  margin-top: 0;
+  padding: 64px 24px 72px;
+  background: #fff;
+}
 
         .impact-home-final .stats-card {
           width: min(1080px, 100%);

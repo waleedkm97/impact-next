@@ -371,6 +371,12 @@ function CertificateContent() {
             trainee: {
               id: item.trainee.id,
               profile: {
+                gender:
+  item.trainee.preferences?.gender === 'female'
+    ? 'female'
+    : item.trainee.preferences?.gender === 'male'
+      ? 'male'
+      : undefined,
                 firstName: item.trainee.firstName ?? '',
                 lastName: item.trainee.lastName ?? '',
                 firstNameEnglish: item.trainee.firstNameEnglish ?? undefined,

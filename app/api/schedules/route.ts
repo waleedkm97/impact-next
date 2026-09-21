@@ -425,7 +425,7 @@ export async function POST(request: Request) {
           where: {
             type: 'training',
             trainingKind: 'public',
-            published: true,
+          
             ...(requestedIds
               ? {
                   id: {

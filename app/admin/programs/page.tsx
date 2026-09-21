@@ -1185,34 +1185,66 @@ setAssessmentSchedules(updatedSchedules);
   }
 
   async function generateAll(year: number) {
-    const publicPrograms = programs.filter(isPublicTraining);
+  const trainingPrograms = programs.filter(
+    (course) => course.type === 'training',
+  );
 
-    if (!publicPrograms.length) {
-      alert('لا توجد برامج Public منشورة للجدولة.');
-      return;
-    }
-
-    if (
-      !confirm(
-        `سيتم جدولة جميع برامج Public بحيث تظهر كل المدن مرة واحدة على الأقل في كل شهر، وفي أيام الأحد فقط لعام ${year}. هل تريد المتابعة؟`,
-      )
-    ) {
-      return;
-    }
-
-    const created = await scheduleRepository.generateSchedules({
-      startDate: `${year}-01-01`,
-      endDate: `${year}-12-31`,
-      cities,
-      courseIds: publicPrograms.map((course) => course.id),
-    });
-
-    alert(
-      created.length
-        ? `تم إنشاء ${created.length} موعدًا لعام ${year}.`
-        : 'لا توجد مواعيد جديدة لهذا العام.',
-    );
+  if (!trainingPrograms.length) {
+    alert('لا توجد دورات تدريبية للجدولة.');
+    return;
   }
+
+  if (
+    !confirm(
+      `سيتم جدولة جميع الدورات التدريبية (${trainingPrograms.length} دورة) في جميع الأشهر المستقبلية، وبأيام الأحد فقط لعام ${year}. هل تريد المتابعة؟`,
+    )
+  ) {
+    return;
+  }
+
+  const today = new Date();
+  const currentYear = today.getFullYear();
+
+  const startDate =
+    year === currentYear
+      ? `${currentYear}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+          today.getDate(),
+        ).padStart(2, '0')}`
+      : `${year}-01-01`;
+
+const response = await fetch('/api/schedules', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    action: 'generate',
+    startDate,
+    endDate: `${year}-12-31`,
+    cities,
+    courseIds: trainingPrograms.map((course) => course.id),
+  }),
+});
+
+if (!response.ok) {
+  const errorText = await response.text();
+  throw new Error(errorText || 'تعذر إنشاء المواعيد.');
+}
+
+const result = await response.json();
+
+const created = Array.isArray(result.schedules)
+  ? result.schedules
+  : Array.isArray(result.created)
+    ? result.created
+    : [];
+
+  alert(
+    created.length
+      ? `تم إنشاء ${created.length} موعدًا جديدًا لـ ${trainingPrograms.length} دورة.`
+      : 'لا توجد مواعيد جديدة تحتاج إلى إنشاء.',
+  );
+}
 
   const currentAssessment = drafts[assessmentTab];
 
@@ -2182,18 +2214,29 @@ setAssessmentSchedules(updatedSchedules);
               </Field>
 
               <Field label="تاريخ البداية">
-                <input
-                  className="admin-input"
-                  type="date"
-                  required
-                  value={scheduleForm.startDate}
-                  onChange={(event) =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      startDate: event.target.value,
-                    })
-                  }
-                />
+               <input
+  className="admin-input"
+  type="date"
+  required
+  min={
+    editingSchedule
+      ? undefined
+      : (() => {
+          const today = new Date();
+          const year = today.getFullYear();
+          const month = String(today.getMonth() + 1).padStart(2, '0');
+          const day = String(today.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        })()
+  }
+  value={scheduleForm.startDate}
+  onChange={(event) =>
+    setScheduleForm({
+      ...scheduleForm,
+      startDate: event.target.value,
+    })
+  }
+/>
               </Field>
 
               <Field label="المدينة">

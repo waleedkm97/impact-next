@@ -667,240 +667,203 @@ export class ScheduleRepository implements IScheduleRepository {
     }
 
     async generateSchedules(options: {
-        startDate?: string;
-        endDate?: string;
-        cities?: string[];
-        courseIds?: string[];
-    }) {
-        await ensureHydrated();
+    startDate?: string;
+    endDate?: string;
+    cities?: string[];
+    courseIds?: string[];
+}) {
+    await ensureHydrated();
 
-        const start = new Date(
-            options.startDate ??
-                `${new Date().getFullYear()}-01-01T00:00:00`
-        );
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-        const end = new Date(
-            options.endDate ??
-                `${start.getFullYear()}-12-31T00:00:00`
-        );
+    const start = new Date(
+        options.startDate ??
+            `${today.getFullYear()}-${String(
+                today.getMonth() + 1,
+            ).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00`,
+    );
 
-        if (
-            Number.isNaN(start.getTime()) ||
-            Number.isNaN(end.getTime()) ||
-            start > end
-        )
-            return [];
+    const end = new Date(
+        options.endDate ??
+            `${start.getFullYear()}-12-31T00:00:00`,
+    );
 
-        const cities =
-            options.cities ??
-            [
-                'الرياض',
-                'جدة',
-                'الدمام',
-                'دبي',
-                'القاهرة',
-                'البحرين',
-                'قطر',
-                'لندن',
-                'برشلونة',
-                'ميلان',
-                'Online',
-            ];
+    if (
+        Number.isNaN(start.getTime()) ||
+        Number.isNaN(end.getTime()) ||
+        start > end
+    ) {
+        return [];
+    }
 
-        const requestedCourseIds =
-            options.courseIds
-                ? new Set(options.courseIds)
-                : null;
+    const cities =
+        options.cities ??
+        [
+            'الرياض',
+            'جدة',
+            'الدمام',
+            'دبي',
+            'القاهرة',
+            'البحرين',
+            'قطر',
+            'لندن',
+            'برشلونة',
+            'ميلان',
+            'Online',
+        ];
 
-        const courses = (
-            await courseRepository.findAll({
-                filter: {
-                    type: 'training',
-                    trainingKind: 'public',
-                    published: true,
-                },
-            })
-        ).filter(
-            course =>
-                !requestedCourseIds ||
-                requestedCourseIds.has(course.id)
-        );
+    const requestedCourseIds = options.courseIds
+        ? new Set(options.courseIds)
+        : null;
 
-        const created: Schedule[] = [];
+    const courseResponse = await fetch('/api/courses', {
+    cache: 'no-store',
+});
 
-        // Same scheduling idea as the original Impact project:
-        // each month is handled independently, all Sundays are collected,
-        // then the cities are distributed across those Sundays so every city
-        // appears at least once during every month for every public course.
+if (!courseResponse.ok) {
+    throw new Error('تعذر تحميل الدورات من قاعدة البيانات.');
+}
 
-        for (const course of courses) {
+const courseData = await courseResponse.json();
+
+const courses = (courseData.courses ?? [])
+    .filter(
+        (course: any) =>
+            course.type === 'training' &&
+            (!requestedCourseIds ||
+                requestedCourseIds.has(course.id)),
+    );
+
+    const created: Schedule[] = [];
+
+    for (const course of courses) {
+        for (
+            let monthCursor = new Date(
+                start.getFullYear(),
+                start.getMonth(),
+                1,
+            );
+            monthCursor <= end;
+            monthCursor = new Date(
+                monthCursor.getFullYear(),
+                monthCursor.getMonth() + 1,
+                1,
+            )
+        ) {
+            const year = monthCursor.getFullYear();
+            const month = monthCursor.getMonth();
+
+            const firstDay = new Date(year, month, 1);
+
+            const lastDay = new Date(
+                year,
+                month + 1,
+                0,
+            );
+
+            const firstSundayOffset =
+                (7 - firstDay.getDay()) % 7;
+
+            const sundays: Date[] = [];
+
             for (
-                let monthCursor = new Date(
-                    start.getFullYear(),
-                    start.getMonth(),
-                    1
-                );
-                monthCursor <= end;
-                monthCursor = new Date(
-                    monthCursor.getFullYear(),
-                    monthCursor.getMonth() + 1,
-                    1
-                )
+                let day = 1 + firstSundayOffset;
+                day <= lastDay.getDate();
+                day += 7
             ) {
-                const year =
-                    monthCursor.getFullYear();
-
-                const month =
-                    monthCursor.getMonth();
-
-                const firstDay = new Date(
+                const sunday = new Date(
                     year,
                     month,
-                    1
+                    day,
                 );
 
-                const lastDay = new Date(
-                    year,
-                    month + 1,
-                    0
-                );
-
-                const firstSundayOffset =
-                    (7 - firstDay.getDay()) % 7;
-
-                const sundays: Date[] = [];
-
-                for (
-                    let day =
-                        1 + firstSundayOffset;
-                    day <= lastDay.getDate();
-                    day += 7
+                if (
+                    sunday >= start &&
+                    sunday <= end &&
+                    sunday >= today
                 ) {
-                    const sunday = new Date(
-                        year,
-                        month,
-                        day
-                    );
-
-                    if (
-                        sunday >= start &&
-                        sunday <= end
-                    )
-                        sundays.push(sunday);
-                }
-
-                if (!sundays.length)
-                    continue;
-
-                for (
-                    let cityIndex = 0;
-                    cityIndex < cities.length;
-                    cityIndex += 1
-                ) {
-                    const city =
-                        cities[cityIndex] ===
-                        'أونلاين'
-                            ? 'Online'
-                            : cities[cityIndex];
-
-                    const date =
-                        sundays[
-                            cityIndex %
-                                sundays.length
-                        ];
-
-                    const dateKey =
-                        date
-                            .toISOString()
-                            .slice(0, 10);
-
-                    const exists =
-                        schedules.some(
-                            schedule =>
-                                schedule.courseId ===
-                                    course.id &&
-                                schedule.startDate
-                                    .toISOString()
-                                    .slice(0, 10) ===
-                                    dateKey &&
-                                (schedule.city ===
-                                'أونلاين'
-                                    ? 'Online'
-                                    : schedule.city) ===
-                                    city
-                        );
-
-                    if (exists)
-                        continue;
-
-                    const online =
-                        city === 'Online';
-
-                    created.push(
-                        await this.create({
-                            courseId:
-                                course.id,
-                            courseTitle:
-                                course.title,
-                            title:
-                                course.title,
-                            description:
-                                course.shortDescription ??
-                                course.description,
-                            startDate:
-                                date,
-                            endDate:
-                                new Date(
-                                    date.getFullYear(),
-                                    date.getMonth(),
-                                    date.getDate() + 2
-                                ),
-                            startTime:
-                                '09:00',
-                            endTime:
-                                online
-                                    ? '12:00'
-                                    : '14:00',
-                            city,
-                            location:
-                                undefined,
-                            onlineMeetingLink:
-                                undefined,
-                            maxParticipants:
-                                20,
-                            currentParticipants:
-                                0,
-                            waitlistMax:
-                                10,
-                            currentWaitlist:
-                                0,
-                            price:
-                                schedulePrice(
-                                    city
-                                ),
-                            currency:
-                                'SAR',
-                            instructorName:
-                                course.trainer
-                                    ?.name,
-                            status:
-                                'available',
-                            published:
-                                true,
-                            allowWaitlist:
-                                true,
-                            requireConfirmation:
-                                false,
-                            recurrence:
-                                'once',
-                            sessions: [],
-                                             })
-                    );
+                    sundays.push(sunday);
                 }
             }
-        }
 
-        return created;
+            if (!sundays.length) continue;
+
+            for (
+                let cityIndex = 0;
+                cityIndex < cities.length;
+                cityIndex += 1
+            ) {
+                const city =
+                    cities[cityIndex] === 'أونلاين'
+                        ? 'Online'
+                        : cities[cityIndex];
+
+                const date =
+                    sundays[
+                        cityIndex % sundays.length
+                    ];
+
+                const dateKey =
+                    date.toISOString().slice(0, 10);
+
+                const exists = schedules.some(
+                    (schedule) =>
+                        schedule.courseId === course.id &&
+                        schedule.startDate
+                            .toISOString()
+                            .slice(0, 10) === dateKey &&
+                        (schedule.city === 'أونلاين'
+                            ? 'Online'
+                            : schedule.city) === city,
+                );
+
+                if (exists) continue;
+
+                const online = city === 'Online';
+
+                created.push(
+                    await this.create({
+                        courseId: course.id,
+                        courseTitle: course.title,
+                        title: course.title,
+                        description:
+                            course.shortDescription ??
+                            course.description,
+                        startDate: date,
+                        endDate: new Date(
+                            date.getFullYear(),
+                            date.getMonth(),
+                            date.getDate() + 2,
+                        ),
+                        startTime: '09:00',
+                        endTime: online
+                            ? '12:00'
+                            : '14:00',
+                        city,
+                        location: undefined,
+                        onlineMeetingLink: undefined,
+                        maxParticipants: 20,
+                        currentParticipants: 0,
+                        waitlistMax: 10,
+                        currentWaitlist: 0,
+                        price: schedulePrice(city),
+                        currency: 'SAR',
+                        instructorName:
+                            course.trainer?.name,
+                        status: 'available',
+                        published: course.published,
+                        allowWaitlist: true,
+                        requireConfirmation: false,
+                        recurrence: 'once',
+                        sessions: [],
+                    }),
+                );
+            }
+        }
+    }
+
+    return created;
     }
 }
 
