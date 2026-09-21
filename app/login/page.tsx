@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+
 import { staffRepository } from '@/lib/data/repositories/staff-repository';
+import { traineeRepository } from '@/lib/data/repositories/trainee-repository';
 
 function setStaffSession(id: string) {
   document.cookie =
@@ -14,22 +16,13 @@ function setStaffSession(id: string) {
 }
 
 function LoginContent() {
-  const [email, setEmail] =
-    useState('');
-
-  const [password, setPassword] =
-    useState('');
-
-  const [msg, setMsg] =
-    useState('');
-
-  const [loading, setLoading] =
-    useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const router = useRouter();
-
-  const searchParams =
-    useSearchParams();
+  const searchParams = useSearchParams();
 
   const next =
     searchParams.get('next') ||
@@ -41,7 +34,6 @@ function LoginContent() {
     event.preventDefault();
 
     setMsg('');
-
     setLoading(true);
 
     try {
@@ -65,22 +57,35 @@ function LoginContent() {
           router.push(
             '/admin/coordinator',
           );
-        } else if (staff.role === 'trainer') {
+        } else if (
+          staff.role === 'trainer'
+        ) {
           router.push(
             '/admin/trainer',
           );
         } else {
-          const firstPermission = staff.permissions?.[0];
-          const permissionPaths: Record<string, string> = {
+          const firstPermission =
+            staff.permissions?.[0];
+
+          const permissionPaths: Record<
+            string,
+            string
+          > = {
             courses: '/admin/courses',
             orders: '/admin/orders',
             trainees: '/admin/students',
             groups: '/admin/groups',
             users: '/admin/users',
             settings: '/admin/settings',
-            contactRequests: '/admin/contact-requests',
+            contactRequests:
+              '/admin/contact-requests',
           };
-          router.push(permissionPaths[firstPermission ?? ''] ?? '/admin');
+
+          router.push(
+            permissionPaths[
+              firstPermission ?? ''
+            ] ?? '/admin',
+          );
         }
 
         router.refresh();
@@ -88,45 +93,126 @@ function LoginContent() {
         return;
       }
 
-     /*
- * إذا لم يكن حساب موظف،
- * نجرب حساب المتدرب من SQL.
- */
-const traineeResponse = await fetch(
-  '/api/trainees/login',
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  },
-);
+      /*
+       * إذا لم يكن حساب موظف،
+       * نجرب حساب المتدرب من SQL.
+       */
+      const traineeResponse =
+        await fetch(
+          '/api/trainees/login',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              email,
+              password,
+            }),
+          },
+        );
 
-const traineeData = await traineeResponse
-  .json()
-  .catch(() => null);
+      const traineeData =
+        await traineeResponse
+          .json()
+          .catch(() => null);
 
-if (
-  !traineeResponse.ok ||
-  !traineeData?.success ||
-  !traineeData?.trainee?.id
-) {
-  setMsg(
-    traineeData?.error ??
-      'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
-  );
+      if (
+        !traineeResponse.ok ||
+        !traineeData?.success ||
+        !traineeData?.trainee?.id
+      ) {
+        setMsg(
+          traineeData?.error ??
+            'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+        );
 
-  return;
-}
+        return;
+      }
 
-document.cookie =
-  `impact_sql_trainee=${encodeURIComponent(
-    traineeData.trainee.id,
-  )}; Max-Age=2592000; Path=/; SameSite=Lax`;
+      /*
+       * جلسة SQL هي مصدر الحقيقة.
+       */
+      document.cookie =
+        `impact_sql_trainee=${encodeURIComponent(
+          traineeData.trainee.id,
+        )}; Max-Age=2592000; Path=/; SameSite=Lax`;
+
+      /*
+       * صفحات الحساب الحالية ما زالت تعتمد
+       * على جلسة traineeRepository المحلية،
+       * لذلك ننشئ/نستعيد نسخة محلية للحساب
+       * ثم نبدأ الجلسة المحلية.
+       */
+      let localUser =
+        await traineeRepository.findByEmail(
+          email,
+        );
+
+      if (!localUser) {
+        localUser =
+          await traineeRepository.create({
+            profile: {
+              firstName:
+                traineeData.trainee
+                  .firstName ?? '',
+              lastName:
+                traineeData.trainee
+                  .lastName ?? '',
+              firstNameEnglish:
+                traineeData.trainee
+                  .firstNameEnglish ??
+                undefined,
+              lastNameEnglish:
+                traineeData.trainee
+                  .lastNameEnglish ??
+                undefined,
+            },
+
+            contact: {
+              email:
+                traineeData.trainee
+                  .email,
+              phone:
+                traineeData.trainee
+                  .phone ??
+                undefined,
+            },
+
+            email:
+              traineeData.trainee.email,
+
+            passwordHash:
+              password,
+
+            status: 'active',
+
+            emailVerified:
+              traineeData.trainee
+                .emailVerified !==
+              false,
+
+            enrollments: [],
+
+            progress: [],
+
+            certificates: [],
+          });
+      }
+
+      const sessionUser =
+        await traineeRepository.startSession(
+          localUser.id,
+        );
+
+      if (!sessionUser) {
+        setMsg(
+          'تم تسجيل الدخول، لكن تعذر إنشاء جلسة المتدرب.',
+        );
+
+        return;
+      }
 
       router.push(
         next.startsWith('/')
@@ -183,34 +269,40 @@ document.cookie =
           />
         </label>
 
-       <label>
-  كلمة المرور
+        <label>
+          كلمة المرور
 
-  <input
-    type="password"
-    required
-    value={password}
-    onChange={(event) =>
-      setPassword(
-        event.target.value,
-      )
-    }
-    autoComplete="current-password"
-  />
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(event) =>
+              setPassword(
+                event.target.value,
+              )
+            }
+            autoComplete="current-password"
+          />
 
-  <div style={{ marginTop: 8, textAlign: 'right' }}>
-    <Link
-      href="/forgot-password"
-      style={{
-        fontSize: 13,
-        color: '#1d5fa7',
-        textDecoration: 'none',
-      }}
-    >
-      نسيت كلمة المرور؟
-    </Link>
-  </div>
-</label>
+          <div
+            style={{
+              marginTop: 8,
+              textAlign: 'right',
+            }}
+          >
+            <Link
+              href="/forgot-password"
+              style={{
+                fontSize: 13,
+                color: '#1d5fa7',
+                textDecoration:
+                  'none',
+              }}
+            >
+              نسيت كلمة المرور؟
+            </Link>
+          </div>
+        </label>
 
         {msg && (
           <div className="auth-error">
@@ -229,6 +321,7 @@ document.cookie =
 
         <p className="auth-register">
           ليس لديك حساب؟{' '}
+
           <Link href="/register">
             إنشاء حساب جديد
           </Link>
@@ -237,6 +330,7 @@ document.cookie =
     </main>
   );
 }
+
 export default function LoginPage() {
   return (
     <Suspense
