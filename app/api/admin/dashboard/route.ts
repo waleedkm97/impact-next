@@ -52,11 +52,10 @@ function parsePositiveInteger(
 /**
  * السعر المعتمد للطلب.
  *
- * مهم:
  * نستخدم total فقط لأنه يمثل السعر الحالي للطلب
  * بعد أي تعديل يتم على الطلب.
  *
- * لا نستخدم paymentAmount هنا حتى لا يظهر مبلغ قديم
+ * لا نستخدم paymentAmount حتى لا يظهر مبلغ قديم
  * مثل 2400 بعد تعديل الطلب إلى 2225.
  */
 function getCurrentOrderTotal(total: unknown) {
@@ -117,6 +116,7 @@ export async function GET(request: Request) {
       categoryCount,
       couponCount,
       paidOrders,
+      allSalesOrders,
       recentOrders,
     ] = await Promise.all([
       prisma.course.count({
@@ -149,6 +149,11 @@ export async function GET(request: Request) {
 
       prisma.coupon.count(),
 
+      /*
+       * مبيعات الشهر المحدد فقط.
+       *
+       * هذا الرقم يتغير عند اختيار شهر مختلف.
+       */
       prisma.order.findMany({
         where: {
           OR: [
@@ -202,7 +207,6 @@ export async function GET(request: Request) {
         },
         select: {
           total: true,
-          paymentAmount: true,
           paidAt: true,
           confirmedAt: true,
           completedAt: true,
@@ -210,6 +214,36 @@ export async function GET(request: Request) {
         },
       }),
 
+      /*
+       * إجمالي المبيعات بالكامل.
+       *
+       * لا يوجد فلتر شهر أو سنة هنا.
+       *
+       * يشمل جميع الطلبات المدفوعة أو المؤكدة أو المكتملة.
+       *
+       * المبلغ المعتمد دائمًا هو total الحالي للطلب.
+       */
+      prisma.order.findMany({
+        where: {
+          OR: [
+            {
+              paymentStatus: 'paid',
+            },
+            {
+              status: {
+                in: ['confirmed', 'completed'],
+              },
+            },
+          ],
+        },
+        select: {
+          total: true,
+        },
+      }),
+
+      /*
+       * آخر الطلبات.
+       */
       prisma.order.findMany({
         orderBy: {
           createdAt: 'desc',
@@ -248,13 +282,9 @@ export async function GET(request: Request) {
     ).length;
 
     /**
-     * إجمالي مبيعات الشهر
+     * المبيعات المحدد.
      *
      * المصدر الوحيد للمبلغ هو order.total.
-     *
-     * لا نستخدم paymentAmount إطلاقًا هنا،
-     * لأن paymentAmount قد يحتوي على قيمة قديمة
-     * بعد تعديل سعر الطلب.
      */
     const amount = paidOrders.reduce(
       (sum, order) => {
@@ -264,7 +294,21 @@ export async function GET(request: Request) {
     );
 
     /**
-     * آخر الطلبات
+     * إجمالي جميع المبيعات.
+     *
+     * لا يتأثر بالشهر أو السنة المختارة.
+     *
+     * المصدر الوحيد للمبلغ هو order.total.
+     */
+    const totalAmount = allSalesOrders.reduce(
+      (sum, order) => {
+        return sum + getCurrentOrderTotal(order.total);
+      },
+      0,
+    );
+
+    /**
+     * آخر الطلبات.
      *
      * نفس قاعدة المبلغ:
      * total فقط.
@@ -299,7 +343,13 @@ export async function GET(request: Request) {
         year,
         month,
         monthLabel: monthNames[month - 1],
+
+        // مبيعات الشهر المختار فقط.
         amount,
+
+        // إجمالي جميع المبيعات ولا يتغير بتغيير الشهر.
+        totalAmount,
+
         paidOrders: paidOrders.length,
       },
 
