@@ -29,10 +29,12 @@ export interface TrainingGroup {
 
   scheduleId?: string;
 
-  corporateDate?: string;
-  corporateDelivery?: 'حضوري' | 'أونلاين';
-  corporateLocation?: string;
-  meetingLink?: string;
+corporateDate?: string;
+corporateDelivery?: 'حضوري' | 'أونلاين';
+corporateLocation?: string;
+trainingDays?: number;
+trainingHours?: number;
+meetingLink?: string;
   expectedTrainees?: number;
   materialAvailable?: boolean;
   course?: {
