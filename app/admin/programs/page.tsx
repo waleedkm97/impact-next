@@ -1565,31 +1565,22 @@ const created = Array.isArray(result.schedules)
                   }
                 />
               </Field>
-
-              <Field label="المحاور" full>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {outlineTopics().map((topic, index) => (
-                    <div key={`program-topic-${index}`} style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        className="admin-input"
-                        value={topic}
-                        placeholder={`المحور ${index + 1}`}
-                        onChange={(event) => updateOutlineTopic(index, event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn-light"
-                        onClick={() => removeOutlineTopic(index)}
-                      >
-                        حذف
-                      </button>
-                    </div>
-                  ))}
-                  <button type="button" className="admin-btn admin-btn-light" onClick={addOutlineTopic}>
-                    + إضافة محور
-                  </button>
-                </div>
-              </Field>
+<Field label="المحاور" full>
+  <textarea
+    className="admin-textarea"
+    rows={10}
+    value={form.outline}
+    placeholder="اكتب أو الصق جميع المحاور هنا، كل محور في سطر مستقل"
+    onChange={(event) => setFormValue('outline', event.target.value)}
+    style={{
+      width: '100%',
+      minHeight: 260,
+      resize: 'vertical',
+      lineHeight: 1.8,
+      whiteSpace: 'pre-wrap',
+    }}
+  />
+</Field>
             </div>
 
             <div className="admin-checkboxes" style={{ marginTop: 16 }}>
